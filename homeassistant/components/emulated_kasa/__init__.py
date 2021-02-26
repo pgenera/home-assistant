@@ -8,6 +8,7 @@ from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.switch import ATTR_CURRENT_POWER_W
 from homeassistant.const import (
     CONF_ENTITIES,
+    CONF_MAC,
     CONF_NAME,
     CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_STARTED,
@@ -31,6 +32,7 @@ CONFIG_ENTITY_SCHEMA = vol.Schema(
             cv.template,
         ),
         vol.Optional(CONF_POWER_ENTITY): cv.string,
+        vol.Optional(CONF_MAC): cv.string,
     }
 )
 
@@ -125,6 +127,7 @@ def get_plug_devices(hass, entity_configs):
         if state is None:
             continue
         name = entity_config.get(CONF_NAME, state.name)
+        conf_mac = entity_config.get(CONF_MAC, None)
 
         if state.state == STATE_ON or state.domain == SENSOR_DOMAIN:
             if CONF_POWER in entity_config:
@@ -141,10 +144,12 @@ def get_plug_devices(hass, entity_configs):
                 power = float(state.state)
         else:
             power = 0.0
+
         last_changed = state.last_changed.timestamp()
         yield PlugInstance(
             entity_config[CONF_UNIQUE_ID],
             start_time=last_changed,
             alias=name,
             power=power,
+            mac=conf_mac,
         )

@@ -23,6 +23,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_FRIENDLY_NAME,
     CONF_ENTITIES,
+    CONF_MAC,
     CONF_NAME,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
@@ -33,6 +34,7 @@ from homeassistant.setup import async_setup_component
 ENTITY_SWITCH = "switch.ac"
 ENTITY_SWITCH_NAME = "A/C"
 ENTITY_SWITCH_POWER = 400.0
+ENTITY_SWITCH_MAC = "00:11:22:33:44:55"
 ENTITY_LIGHT = "light.bed_light"
 ENTITY_LIGHT_NAME = "Bed Room Lights"
 ENTITY_FAN = "fan.ceiling_fan"
@@ -49,6 +51,7 @@ CONFIG = {
             ENTITY_SWITCH: {
                 CONF_NAME: ENTITY_SWITCH_NAME,
                 CONF_POWER: ENTITY_SWITCH_POWER,
+                CONF_MAC: ENTITY_SWICH_MAC,
             },
             ENTITY_LIGHT: {
                 CONF_NAME: ENTITY_LIGHT_NAME,
