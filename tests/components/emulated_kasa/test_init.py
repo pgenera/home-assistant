@@ -51,7 +51,7 @@ CONFIG = {
             ENTITY_SWITCH: {
                 CONF_NAME: ENTITY_SWITCH_NAME,
                 CONF_POWER: ENTITY_SWITCH_POWER,
-                CONF_MAC: ENTITY_SWICH_MAC,
+                CONF_MAC: ENTITY_SWITCH_MAC,
             },
             ENTITY_LIGHT: {
                 CONF_NAME: ENTITY_LIGHT_NAME,
