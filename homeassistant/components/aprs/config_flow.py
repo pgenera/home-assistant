@@ -17,7 +17,7 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback, split_entity_id
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     EntitySelector,
@@ -60,7 +60,12 @@ from .const import (
     RECEIVE_ONLY_PASSCODE,
     WEATHER_SYMBOL_CODE,
 )
-from .publisher import AprsIsClient
+from .packet import (
+    COMMENT_MAX_LENGTH,
+    COMMENT_MAX_LENGTH_AFTER_EXTENSION,
+    valid_comment,
+)
+from .publisher import ZONE_DOMAIN, AprsIsClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,6 +188,18 @@ def validate_station(user_input: Mapping[str, Any]) -> dict[str, str]:
         return {CONF_SYMBOL: "invalid_symbol"}
     if any(user_input[CONF_WEATHER].values()) and symbol[1] != WEATHER_SYMBOL_CODE:
         return {CONF_SYMBOL: "weather_symbol_required"}
+    comment: str = user_input.get(CONF_COMMENT, "")
+    if not valid_comment(comment):
+        return {CONF_COMMENT: "invalid_comment"}
+    # Weather data or a moving station's course and speed come first.
+    has_extension = (
+        symbol[1] == WEATHER_SYMBOL_CODE
+        or split_entity_id(user_input[CONF_LOCATION_ENTITY])[0] != ZONE_DOMAIN
+    )
+    if len(comment) > (
+        COMMENT_MAX_LENGTH_AFTER_EXTENSION if has_extension else COMMENT_MAX_LENGTH
+    ):
+        return {CONF_COMMENT: "comment_too_long"}
     return {}
 
 

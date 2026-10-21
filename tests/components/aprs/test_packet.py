@@ -104,6 +104,21 @@ def test_build_report() -> None:
     }
 
 
+def test_build_report_cleans_comment() -> None:
+    """Test characters APRS does not allow are left out of the comment."""
+    packet = build_report(
+        "N0CALL-9",
+        datetime(2026, 10, 21, 23, 59, tzinfo=UTC),
+        format_position(42.562956, -70.86915, "/-"),
+        None,
+        "QTH\r\nN0CALL-9>APRS:|~fake",
+    )
+
+    assert packet == (
+        "N0CALL-9>APZHAS,TCPIP*:/212359z4233.78N/07052.15W-QTHN0CALL-9>APRS:fake"
+    )
+
+
 def test_build_report_position_only() -> None:
     """Test a report without weather data."""
     packet = build_report(

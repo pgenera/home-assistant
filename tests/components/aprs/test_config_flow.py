@@ -196,6 +196,29 @@ async def test_station_flow_already_configured(
             {CONF_SYMBOL: "weather_symbol_required"},
             id="weather_without_wx_symbol",
         ),
+        pytest.param(
+            {CONF_COMMENT: "Home\r\nN0CALL-13>APRS:!fake"},
+            {CONF_COMMENT: "invalid_comment"},
+            id="comment_line_break",
+        ),
+        pytest.param(
+            {CONF_COMMENT: "a|b"}, {CONF_COMMENT: "invalid_comment"}, id="comment_pipe"
+        ),
+        pytest.param(
+            {CONF_SYMBOL: "/-", CONF_WEATHER: {}, CONF_COMMENT: "090/036 QTH"},
+            {CONF_COMMENT: "invalid_comment"},
+            id="comment_like_course_speed",
+        ),
+        pytest.param(
+            {CONF_COMMENT: "x" * 37},
+            {CONF_COMMENT: "comment_too_long"},
+            id="comment_too_long_weather",
+        ),
+        pytest.param(
+            {CONF_SYMBOL: "/-", CONF_WEATHER: {}, CONF_COMMENT: "x" * 44},
+            {CONF_COMMENT: "comment_too_long"},
+            id="comment_too_long_fixed",
+        ),
     ],
 )
 @pytest.mark.usefixtures("mock_publisher_is")

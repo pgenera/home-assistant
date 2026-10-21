@@ -9,9 +9,11 @@
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "comment_too_long": "Shorten the comment to 43 characters, or 36 for a weather station or a moving location.",
       "invalid_auth": "The passcode is not valid for this callsign.",
       "invalid_callsign": "Enter a callsign, optionally with an SSID, such as N0CALL-13.",
       "invalid_callsigns": "Enter one or more callsigns to track, such as N0CALL-9, or N0CALL* for every SSID.",
+      "invalid_comment": "Use only printable ASCII characters other than | and ~, and don't start the comment with something like 123/456, which reads as course and speed.",
       "invalid_symbol": "Enter a symbol table character (/, \\ or an overlay letter or digit) followed by the symbol code, such as /_ for a weather station.",
       "unknown": "[%key:common::config_flow::error::unknown%]",
       "weather_symbol_required": "Weather data can only be sent with a weather station symbol, such as /_."
@@ -51,7 +53,7 @@
           "symbol": "Symbol"
         },
         "data_description": {
-          "comment": "Text sent at the end of each report.",
+          "comment": "Text sent at the end of each report: up to 43 characters, or 36 for a weather station or a moving location.",
           "location_entity": "Zone, person or device tracker whose position is reported. Moving entities report more often the faster they go, from every 30 minutes when stopped to every 3 minutes at 60 mph, and soon after turning; their course and speed are included.",
           "position_ambiguity": "Number of trailing position digits to leave out, from 0 (exact) to 4 (nearest degree).",
           "suppress_template": "Optional template; while it renders true, no reports are sent, for example near home. If it fails to render, reports are held back too.",
@@ -135,7 +137,9 @@
   },
   "options": {
     "error": {
+      "comment_too_long": "[%key:component::aprs::config::error::comment_too_long%]",
       "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]",
+      "invalid_comment": "[%key:component::aprs::config::error::invalid_comment%]",
       "invalid_symbol": "[%key:component::aprs::config::error::invalid_symbol%]",
       "weather_symbol_required": "[%key:component::aprs::config::error::weather_symbol_required%]"
     },

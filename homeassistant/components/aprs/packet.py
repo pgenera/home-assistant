@@ -2,8 +2,23 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 from .const import TOCALL
+
+# Comments are printable ASCII except | and ~, which APRS-IS and Mic-E reserve.
+_INVALID_COMMENT_CHARS = re.compile(r"[^\x20-\x7b\x7d]")
+# Leading text a parser would read as a data extension such as course/speed.
+_EXTENSION_LIKE = re.compile(r"\d{3}/\d{3}")
+COMMENT_MAX_LENGTH = 43
+COMMENT_MAX_LENGTH_AFTER_EXTENSION = 36
+
+
+def valid_comment(comment: str) -> bool:
+    """Return whether a comment can be sent as is."""
+    return not (
+        _INVALID_COMMENT_CHARS.search(comment) or _EXTENSION_LIKE.match(comment)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -131,4 +146,6 @@ def build_report(
     """
     body = f"/{timestamp:%d%H%M}z{position}"
     body += course_speed if weather is None else format_weather(weather)
+    # A line break would end the packet and start another under our login.
+    comment = _INVALID_COMMENT_CHARS.sub("", comment)
     return f"{callsign}>{TOCALL},TCPIP*:{body}{comment}"
