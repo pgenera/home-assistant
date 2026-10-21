@@ -39,3 +39,11 @@ WEATHER_SYMBOL_CODE: Final = "_"
 WEATHER_INTERVAL: Final = timedelta(minutes=10)
 POSITION_INTERVAL: Final = timedelta(minutes=30)
 MOVING_MIN_INTERVAL: Final = timedelta(minutes=2)
+
+RECONNECT_DELAY: Final = 30
+
+CONF_CALLSIGNS: Final = "callsigns"
+CONF_ENTRY_TYPE: Final = "entry_type"
+ENTRY_TYPE_RECEIVER: Final = "receiver"
+ENTRY_TYPE_STATION: Final = "station"
+RECEIVE_ONLY_PASSCODE: Final = "-1"

@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import AprsConfigEntry
 from .const import DOMAIN
+from .publisher import AprsPublisher
 
 PARALLEL_UPDATES = 0
 
@@ -35,6 +36,7 @@ class AprsLastReportSensor(SensorEntity):
 
     def __init__(self, entry: AprsConfigEntry) -> None:
         """Initialize the sensor."""
+        assert isinstance(entry.runtime_data, AprsPublisher)
         self._publisher = entry.runtime_data
         assert entry.unique_id
         self._attr_unique_id = f"{entry.unique_id}_last_report"

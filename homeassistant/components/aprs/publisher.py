@@ -5,8 +5,7 @@ from datetime import datetime
 import logging
 from typing import Any
 
-import aprslib
-from aprslib import ConnectionError as AprsConnectionError, LoginError
+from aprslib import IS, ConnectionError as AprsConnectionError, LoginError
 
 from homeassistant.const import (
     ATTR_LATITUDE,
@@ -93,8 +92,8 @@ class AprsIsClient:
         self._passcode = passcode
         self._host = host
 
-    def _connect(self) -> aprslib.IS:
-        ais = aprslib.IS(
+    def _connect(self) -> IS:
+        ais = IS(
             self.callsign, passwd=self._passcode, host=self._host, port=FILTER_PORT
         )
         ais.connect()

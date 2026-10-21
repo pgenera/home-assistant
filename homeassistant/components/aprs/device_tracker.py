@@ -1,18 +1,15 @@
 """Support for APRS device tracking."""
 
-import logging
-import threading
 from typing import Any, override
 
-import aprslib
-from aprslib import ConnectionError as AprsConnectionError, LoginError
-import geopy.distance
 import probatio
 
 from homeassistant.components.device_tracker import (
     PLATFORM_SCHEMA as DEVICE_TRACKER_PLATFORM_SCHEMA,
-    SeeCallback,
+    AsyncSeeCallback,
+    TrackerEntity,
 )
+from homeassistant.config_entries import SOURCE_IMPORT
 from homeassistant.const import (
     ATTR_GPS_ACCURACY,
     ATTR_LATITUDE,
@@ -21,42 +18,39 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_TIMEOUT,
     CONF_USERNAME,
-    EVENT_HOMEASSISTANT_STOP,
 )
-from homeassistant.core import Event, HomeAssistant
-from homeassistant.helpers import config_validation as cv
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant, callback
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_registry as er,
+    issue_registry as ir,
+)
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.util import slugify
 
-DOMAIN = "aprs"
+from . import AprsConfigEntry
+from .const import (
+    CONF_CALLSIGN,
+    CONF_CALLSIGNS,
+    DEFAULT_HOST,
+    DOMAIN,
+    RECEIVE_ONLY_PASSCODE,
+)
+from .receiver import EXTRA_ATTRIBUTES, AprsReceiver, AprsStation
 
-_LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
-ATTR_ALTITUDE = "altitude"
-ATTR_COURSE = "course"
-ATTR_COMMENT = "comment"
-ATTR_FROM = "from"
-ATTR_FORMAT = "format"
-ATTR_OBJECT_NAME = "object_name"
-ATTR_POS_AMBIGUITY = "posambiguity"
-ATTR_SPEED = "speed"
-
-CONF_CALLSIGNS = "callsigns"
-
-DEFAULT_HOST = "rotate.aprs2.net"
-DEFAULT_PASSWORD = "-1"
 DEFAULT_TIMEOUT = 30.0
-
-FILTER_PORT = 14580
-
-MSG_FORMATS = ["compressed", "uncompressed", "mic-e", "object"]
 
 PLATFORM_SCHEMA = DEVICE_TRACKER_PLATFORM_SCHEMA.extend(
     {
         probatio.Required(CONF_CALLSIGNS): probatio.EnsureList(),
         probatio.Required(CONF_USERNAME): cv.string,
         probatio.Optional(
-            probatio.Secret(CONF_PASSWORD), default=DEFAULT_PASSWORD
+            probatio.Secret(CONF_PASSWORD), default=RECEIVE_ONLY_PASSCODE
         ): cv.string,
         probatio.Optional(CONF_HOST, default=DEFAULT_HOST): cv.string,
         probatio.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): probatio.Coerce(
@@ -66,143 +60,165 @@ PLATFORM_SCHEMA = DEVICE_TRACKER_PLATFORM_SCHEMA.extend(
 )
 
 
-def make_filter(callsigns: list) -> str:
-    """Make a server-side filter from a list of callsigns."""
-    return " ".join(f"b/{sign.upper()}" for sign in callsigns)
-
-
-def gps_accuracy(gps: tuple[float, float], posambiguity: int) -> int:
-    """Calculate the GPS accuracy based on APRS posambiguity."""
-
-    pos_a_map = {0: 0, 1: 1 / 600, 2: 1 / 60, 3: 1 / 6, 4: 1}
-    if posambiguity in pos_a_map:
-        degrees = pos_a_map[posambiguity]
-
-        gps2 = (gps[0], gps[1] + degrees)
-        dist_m: float = geopy.distance.distance(gps, gps2).m
-
-        accuracy = round(dist_m)
-    else:
-        message = f"APRS position ambiguity must be 0-4, not '{posambiguity}'."
-        raise ValueError(message)
-
-    return accuracy
-
-
-def setup_scanner(
+async def async_setup_scanner(
     hass: HomeAssistant,
     config: ConfigType,
-    see: SeeCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    _async_see: AsyncSeeCallback,
+    _discovery_info: DiscoveryInfoType | None = None,
 ) -> bool:
-    """Set up the APRS tracker."""
-    callsigns = config[CONF_CALLSIGNS]
-    server_filter = make_filter(callsigns)
+    """Import the YAML configuration into a receiver config entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data={
+            CONF_CALLSIGN: config[CONF_USERNAME],
+            CONF_PASSWORD: config[CONF_PASSWORD],
+            CONF_HOST: config[CONF_HOST],
+            CONF_CALLSIGNS: config[CONF_CALLSIGNS],
+        },
+    )
 
-    callsign = config[CONF_USERNAME]
-    password = config[CONF_PASSWORD]
-    host = config[CONF_HOST]
-    timeout = config[CONF_TIMEOUT]
-    aprs_listener = AprsListenerThread(callsign, password, host, server_filter, see)
-
-    def aprs_disconnect(event: Event) -> None:
-        """Stop the APRS connection."""
-        aprs_listener.stop()
-
-    aprs_listener.start()
-    hass.bus.listen_once(EVENT_HOMEASSISTANT_STOP, aprs_disconnect)
-
-    if not aprs_listener.start_event.wait(timeout):
-        _LOGGER.error("Timeout waiting for APRS to connect")
+    if result["type"] is FlowResultType.ABORT and result["reason"] in (
+        "cannot_connect",
+        "invalid_auth",
+    ):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"yaml_import_{result['reason']}",
+            is_fixable=False,
+            issue_domain=DOMAIN,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=f"yaml_import_{result['reason']}",
+            translation_placeholders={
+                CONF_CALLSIGN: config[CONF_USERNAME],
+                CONF_HOST: config[CONF_HOST],
+            },
+        )
         return False
 
-    if not aprs_listener.start_success:
-        _LOGGER.error(aprs_listener.start_message)
-        return False
-
-    _LOGGER.debug(aprs_listener.start_message)
+    ir.async_create_issue(
+        hass,
+        HOMEASSISTANT_DOMAIN,
+        f"deprecated_yaml_{DOMAIN}",
+        is_fixable=False,
+        issue_domain=DOMAIN,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="deprecated_yaml",
+        translation_placeholders={"domain": DOMAIN, "integration_title": "APRS"},
+    )
     return True
 
 
-class AprsListenerThread(threading.Thread):
-    """APRS message listener."""
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: AprsConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Track the stations a receiver hears."""
+    receiver = entry.runtime_data
+    assert isinstance(receiver, AprsReceiver)
+    assert entry.unique_id
+    unique_id = entry.unique_id
+    prefix = f"{unique_id}_"
+    entities: dict[str, AprsTrackerEntity] = {
+        name: AprsTrackerEntity(unique_id, name)
+        for registry_entry in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+        if (name := registry_entry.unique_id.removeprefix(prefix))
+    }
+    async_add_entities(entities.values())
+
+    @callback
+    def _async_station_heard(station: AprsStation) -> None:
+        if (entity := entities.get(station.name)) is None:
+            entity = entities[station.name] = AprsTrackerEntity(
+                unique_id, station.name, station
+            )
+            async_add_entities([entity])
+            return
+        entity.async_update_station(station)
+
+    entry.async_on_unload(receiver.async_add_listener(_async_station_heard))
+
+
+class AprsTrackerEntity(TrackerEntity, RestoreEntity):
+    """The last position heard from an APRS station or object."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_should_poll = False
 
     def __init__(
-        self,
-        callsign: str,
-        password: str,
-        host: str,
-        server_filter: str,
-        see: SeeCallback,
+        self, entry_unique_id: str, name: str, station: AprsStation | None = None
     ) -> None:
-        """Initialize the class."""
-        super().__init__()
-
-        self.callsign = callsign
-        self.host = host
-        self.start_event = threading.Event()
-        self.see = see
-        self.server_filter = server_filter
-        self.start_message = ""
-        self.start_success = False
-
-        self.ais = aprslib.IS(
-            self.callsign, passwd=password, host=self.host, port=FILTER_PORT
+        """Initialize the tracker."""
+        self._attr_unique_id = f"{entry_unique_id}_{name}"
+        self._device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._attr_unique_id)},
+            name=name,
+            configuration_url=f"https://aprs.fi/info/a/{name}",
         )
-
-    def start_complete(self, success: bool, message: str) -> None:
-        """Complete startup process."""
-        self.start_message = message
-        self.start_success = success
-        self.start_event.set()
+        self._name = name
+        self._station = station
 
     @override
-    def run(self) -> None:
-        """Connect to APRS and listen for data."""
-        self.ais.set_filter(self.server_filter)
+    async def async_added_to_hass(self) -> None:
+        """Restore the last position when nothing has been heard yet."""
+        await super().async_added_to_hass()
+        if (
+            self._station is not None
+            or (state := await self.async_get_last_state()) is None
+        ):
+            return
+        attributes = state.attributes
+        if ATTR_LATITUDE not in attributes or ATTR_LONGITUDE not in attributes:
+            return
+        self._station = AprsStation(
+            name=self._name,
+            latitude=attributes[ATTR_LATITUDE],
+            longitude=attributes[ATTR_LONGITUDE],
+            gps_accuracy=attributes.get(ATTR_GPS_ACCURACY, 0),
+            attributes={
+                attr: attributes[attr]
+                for attr in EXTRA_ATTRIBUTES
+                if attr in attributes
+            },
+        )
 
-        try:
-            _LOGGER.debug(
-                "Opening connection to %s with callsign %s", self.host, self.callsign
-            )
-            self.ais.connect()
-            self.start_complete(
-                True, f"Connected to {self.host} with callsign {self.callsign}."
-            )
-            self.ais.consumer(callback=self.rx_msg, immortal=True)
-        except (AprsConnectionError, LoginError) as err:
-            self.start_complete(False, str(err))
-        except OSError:
-            _LOGGER.debug(
-                "Closing connection to %s with callsign %s", self.host, self.callsign
-            )
+    @property
+    @override
+    def device_info(self) -> DeviceInfo:
+        """Return a device per station."""
+        return self._device_info
 
-    def stop(self) -> None:
-        """Close the connection to the APRS network."""
-        self.ais.close()
+    @callback
+    def async_update_station(self, station: AprsStation) -> None:
+        """Update with a newly heard position."""
+        self._station = station
+        self.async_write_ha_state()
 
-    def rx_msg(self, msg: dict[str, Any]) -> None:
-        """Receive message and process if position."""
-        _LOGGER.debug("APRS message received: %s", str(msg))
-        if msg[ATTR_FORMAT] in MSG_FORMATS:
-            if msg[ATTR_FORMAT] == "object":
-                dev_id = slugify(msg[ATTR_OBJECT_NAME])
-            else:
-                dev_id = slugify(msg[ATTR_FROM])
-            lat = msg[ATTR_LATITUDE]
-            lon = msg[ATTR_LONGITUDE]
+    @property
+    @override
+    def latitude(self) -> float | None:
+        """Return the latitude."""
+        return None if self._station is None else self._station.latitude
 
-            attrs = {}
-            if ATTR_POS_AMBIGUITY in msg:
-                pos_amb = msg[ATTR_POS_AMBIGUITY]
-                try:
-                    attrs[ATTR_GPS_ACCURACY] = gps_accuracy((lat, lon), pos_amb)
-                except ValueError:
-                    _LOGGER.warning(
-                        "APRS message contained invalid posambiguity: %s", str(pos_amb)
-                    )
-            for attr in (ATTR_ALTITUDE, ATTR_COMMENT, ATTR_COURSE, ATTR_SPEED):
-                if attr in msg:
-                    attrs[attr] = msg[attr]
+    @property
+    @override
+    def longitude(self) -> float | None:
+        """Return the longitude."""
+        return None if self._station is None else self._station.longitude
 
-            self.see(dev_id=dev_id, gps=(lat, lon), attributes=attrs)
+    @property
+    @override
+    def location_accuracy(self) -> float:
+        """Return the accuracy implied by the position ambiguity."""
+        return 0 if self._station is None else self._station.gps_accuracy
+
+    @property
+    @override
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return altitude, course, speed and comment when reported."""
+        return None if self._station is None else self._station.attributes

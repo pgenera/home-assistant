@@ -1,46 +1,54 @@
-"""Test APRS device tracker."""
+"""Test APRS device tracking."""
 
 from typing import Any
+from unittest.mock import MagicMock, patch
 
-import aprslib
 from aprslib import ConnectionError as AprsConnectionError, LoginError
 import pytest
+from pytest_homeassistant.common import MockConfigEntry, mock_restore_cache
 from syrupy.assertion import SnapshotAssertion
 
-from homeassistant.components.aprs import device_tracker
+from homeassistant.components.aprs.const import (
+    CONF_CALLSIGN,
+    CONF_CALLSIGNS,
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_TYPE_RECEIVER,
+)
+from homeassistant.components.aprs.receiver import gps_accuracy, make_filter
 from homeassistant.components.device_tracker import DOMAIN as DEVICE_TRACKER_DOMAIN
 from homeassistant.const import (
+    ATTR_GPS_ACCURACY,
+    ATTR_LATITUDE,
+    ATTR_LONGITUDE,
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PLATFORM,
-    CONF_TIMEOUT,
     CONF_USERNAME,
-    EVENT_HOMEASSISTANT_STOP,
+    STATE_UNKNOWN,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant, State
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.setup import async_setup_component
 
-from .conftest import MockAprsIs
+from .conftest import TEST_PASSCODE, TEST_RECEIVER, TEST_SERVER, MockAprsIs
 
-TEST_CALLSIGN = "testcall"
-TEST_HOST = "testhost"
-TEST_PASSWORD = "testpass"
 TEST_COORDS_NULL_ISLAND = (0, 0)
-PLATFORM_COMPONENT = "aprs.device_tracker"
+TRACKER = "device_tracker.xx0foo_1"
+POSITION = "XX0FOO-1>APRS,TCPIP*:!4903.50N/07201.75W>090/036/A=001234Mobile"
 
-CONFIG = {
-    CONF_PLATFORM: "aprs",
-    CONF_USERNAME: TEST_CALLSIGN,
-    CONF_PASSWORD: TEST_PASSWORD,
-    CONF_HOST: TEST_HOST,
-    device_tracker.CONF_CALLSIGNS: ["XX0FOO*", "YY0BAR-1"],
+YAML_CONFIG = {
+    CONF_PLATFORM: DOMAIN,
+    CONF_USERNAME: "n0call",
+    CONF_PASSWORD: TEST_PASSCODE,
+    CONF_HOST: TEST_SERVER,
+    CONF_CALLSIGNS: ["xx0foo*", "YY0BAR-1"],
 }
 
 
-async def _async_setup(hass: HomeAssistant, config: dict[str, Any]) -> None:
-    assert await async_setup_component(
-        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: config}
-    )
+async def _async_setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
 
@@ -53,7 +61,7 @@ async def _async_setup(hass: HomeAssistant, config: dict[str, Any]) -> None:
 )
 def test_make_filter(callsigns: list[str], expected: str) -> None:
     """Test the server-side filter built from callsigns."""
-    assert device_tracker.make_filter(callsigns) == expected
+    assert make_filter(callsigns) == expected
 
 
 @pytest.mark.parametrize(
@@ -62,56 +70,37 @@ def test_make_filter(callsigns: list[str], expected: str) -> None:
 )
 def test_gps_accuracy(posambiguity: int, accuracy: int) -> None:
     """Test GPS accuracy for each APRS position ambiguity level."""
-    assert device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity) == (
-        accuracy
-    )
+    assert gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity) == accuracy
 
 
 @pytest.mark.parametrize("posambiguity", [5, "not an int", 1.2])
 def test_gps_accuracy_invalid(posambiguity: Any) -> None:
     """Test GPS accuracy with invalid position ambiguity."""
     with pytest.raises(ValueError, match="APRS position ambiguity must be 0-4"):
-        device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity)
+        gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity)
 
 
-async def test_setup(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
-    """Test the platform connects with the configured login and filter."""
-    await _async_setup(hass, CONFIG)
+async def test_setup(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test the receiver logs in with its filter and has no trackers yet."""
+    await _async_setup(hass, mock_receiver_entry)
+    await mock_aprs_is.async_wait_consuming(hass)
 
-    assert PLATFORM_COMPONENT in hass.config.components
     mock_aprs_is.mock_class.assert_called_once_with(
-        TEST_CALLSIGN, passwd=TEST_PASSWORD, host=TEST_HOST, port=14580
+        TEST_RECEIVER, passwd="-1", host=TEST_SERVER, port=14580
     )
     mock_aprs_is.client.set_filter.assert_called_once_with("b/XX0FOO* b/YY0BAR-1")
-    mock_aprs_is.client.connect.assert_called_once_with()
+    mock_aprs_is.client.consumer.assert_called_once()
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == []
 
 
-async def test_setup_defaults(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
-    """Test the default server and receive-only passcode."""
-    await _async_setup(
-        hass,
-        {
-            CONF_PLATFORM: "aprs",
-            CONF_USERNAME: TEST_CALLSIGN,
-            device_tracker.CONF_CALLSIGNS: "XX0FOO",
-        },
-    )
-
-    mock_aprs_is.mock_class.assert_called_once_with(
-        TEST_CALLSIGN, passwd="-1", host="rotate.aprs2.net", port=14580
-    )
-    mock_aprs_is.client.set_filter.assert_called_once_with("b/XX0FOO")
-
-
-@pytest.mark.usefixtures("mock_device_tracker_conf")
 @pytest.mark.parametrize(
     ("raw_packet", "entity_id"),
     [
-        pytest.param(
-            "XX0FOO-1>APRS,TCPIP*:!4903.50N/07201.75W>090/036/A=001234Mobile",
-            "device_tracker.xx0foo_1",
-            id="uncompressed",
-        ),
+        pytest.param(POSITION, TRACKER, id="uncompressed"),
         pytest.param(
             "XX0FOO-2>APRS,TCPIP*:!4903.5 N/07201.7 W-",
             "device_tracker.xx0foo_2",
@@ -135,30 +124,77 @@ async def test_setup_defaults(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> 
 )
 async def test_position_report(
     hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_receiver_entry: MockConfigEntry,
     mock_aprs_is: MockAprsIs,
     snapshot: SnapshotAssertion,
     raw_packet: str,
     entity_id: str,
 ) -> None:
-    """Test position reports update device trackers."""
-    await _async_setup(hass, CONFIG)
+    """Test a station's first position report creates its tracker."""
+    await _async_setup(hass, mock_receiver_entry)
 
-    await mock_aprs_is.async_receive(hass, aprslib.parse(raw_packet))
+    await mock_aprs_is.async_receive(hass, raw_packet)
 
-    assert hass.states.get(entity_id) == snapshot
+    assert hass.states.get(entity_id) == snapshot(name="state")
+    assert entity_registry.async_get(entity_id) == snapshot(name="registry")
 
 
-@pytest.mark.usefixtures("mock_device_tracker_conf")
-async def test_position_report_invalid_ambiguity(
+async def test_position_update(
     hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test later reports move the same tracker."""
+    await _async_setup(hass, mock_receiver_entry)
+    await mock_aprs_is.async_receive(hass, POSITION)
+
+    await mock_aprs_is.async_receive(hass, "XX0FOO-1>APRS,TCPIP*:!4904.00N/07202.00W>")
+
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == [TRACKER]
+    state = hass.states.get(TRACKER)
+    assert state.attributes[ATTR_LATITUDE] == pytest.approx(49.0667, abs=1e-4)
+    assert "altitude" not in state.attributes
+
+
+@pytest.mark.parametrize(
+    "raw_packet",
+    [
+        pytest.param(
+            "XX0FOO-13>APZHAS,TCPIP*:/211631z4233.78N/07052.15W_176/002g004t052h69",
+            id="weather_station",
+        ),
+        pytest.param("XX0FOO-1>APRS,TCPIP*::YY0BAR-1 :Hello{1", id="message"),
+        pytest.param(
+            "XX0FOO-1>APRS,TCPIP*:_10090556c220s004g005t077r000p000P000h50b09900",
+            id="positionless_weather",
+        ),
+    ],
+)
+async def test_packets_not_tracked(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+    raw_packet: str,
+) -> None:
+    """Test weather stations and packets without a position are not tracked."""
+    await _async_setup(hass, mock_receiver_entry)
+
+    await mock_aprs_is.async_receive(hass, raw_packet)
+
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == []
+
+
+async def test_invalid_ambiguity(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
     mock_aprs_is: MockAprsIs,
     caplog: pytest.LogCaptureFixture,
-    snapshot: SnapshotAssertion,
 ) -> None:
     """Test a report with invalid position ambiguity is used without accuracy."""
-    await _async_setup(hass, CONFIG)
+    await _async_setup(hass, mock_receiver_entry)
 
-    await mock_aprs_is.async_receive(
+    await mock_aprs_is.async_receive_parsed(
         hass,
         {
             "format": "uncompressed",
@@ -170,66 +206,159 @@ async def test_position_report_invalid_ambiguity(
     )
 
     assert "APRS message contained invalid posambiguity: 5" in caplog.text
-    assert hass.states.get("device_tracker.xx0foo_1") == snapshot
-
-
-@pytest.mark.usefixtures("mock_device_tracker_conf")
-async def test_non_position_report(
-    hass: HomeAssistant, mock_aprs_is: MockAprsIs
-) -> None:
-    """Test packets without a position are ignored."""
-    await _async_setup(hass, CONFIG)
-
-    await mock_aprs_is.async_receive(
-        hass, aprslib.parse("XX0FOO-1>APRS,TCPIP*::YY0BAR-1 :Hello{1")
-    )
-
-    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == []
+    assert hass.states.get(TRACKER).attributes[ATTR_GPS_ACCURACY] == 0
 
 
 @pytest.mark.parametrize(
-    "error",
+    ("restored", "expected"),
     [
-        pytest.param(AprsConnectionError("Unable to connect."), id="connection"),
-        pytest.param(LoginError("Password is incorrect"), id="login"),
+        pytest.param(
+            {
+                ATTR_LATITUDE: 49.0583,
+                ATTR_LONGITUDE: -72.0292,
+                ATTR_GPS_ACCURACY: 186,
+                "altitude": 376.1,
+                "friendly_name": "XX0FOO-1",
+            },
+            "not_home",
+            id="position",
+        ),
+        pytest.param({}, STATE_UNKNOWN, id="no_position"),
     ],
 )
-async def test_setup_connect_error(
+async def test_restore(
     hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+    snapshot: SnapshotAssertion,
+    restored: dict[str, Any],
+    expected: str,
+) -> None:
+    """Test known stations come back with their last position after a restart."""
+    mock_receiver_entry.add_to_hass(hass)
+    entity_registry.async_get_or_create(
+        DEVICE_TRACKER_DOMAIN,
+        DOMAIN,
+        f"{TEST_RECEIVER}_XX0FOO-1",
+        config_entry=mock_receiver_entry,
+        suggested_object_id="xx0foo_1",
+    )
+    mock_restore_cache(hass, [State(TRACKER, "not_home", restored)])
+
+    await _async_setup(hass, mock_receiver_entry)
+
+    state = hass.states.get(TRACKER)
+    assert state.state == expected
+    assert state.attributes == snapshot
+
+    await mock_aprs_is.async_receive(hass, POSITION)
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == [TRACKER]
+
+
+async def test_reconnect(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
     mock_aprs_is: MockAprsIs,
     caplog: pytest.LogCaptureFixture,
-    error: Exception,
 ) -> None:
-    """Test a failed connection fails platform setup."""
-    mock_aprs_is.client.connect.side_effect = error
+    """Test the receiver reconnects after the server drops it."""
+    await _async_setup(hass, mock_receiver_entry)
+    await mock_aprs_is.async_wait_consuming(hass)
+    mock_aprs_is.client.connect.side_effect = [
+        AprsConnectionError("no banner from server"),
+        None,
+    ]
 
-    await _async_setup(hass, CONFIG)
+    with patch("homeassistant.components.aprs.receiver.RECONNECT_DELAY", 0):
+        await hass.async_add_executor_job(mock_aprs_is.drop_connection)
+        await mock_aprs_is.async_receive(hass, POSITION)
 
-    assert PLATFORM_COMPONENT not in hass.config.components
-    assert str(error) in caplog.text
-    mock_aprs_is.client.consumer.assert_not_called()
+    assert f"Lost connection to APRS-IS server {TEST_SERVER}" in caplog.text
+    assert f"Reconnected to APRS-IS server {TEST_SERVER}" in caplog.text
+    assert mock_aprs_is.client.connect.call_count == 3
+    assert hass.states.get(TRACKER) is not None
 
 
-async def test_setup_timeout(
+@pytest.mark.usefixtures("mock_aprs_is")
+async def test_yaml_import(
     hass: HomeAssistant,
-    mock_aprs_is: MockAprsIs,
-    caplog: pytest.LogCaptureFixture,
+    issue_registry: ir.IssueRegistry,
+    mock_publisher_is: MagicMock,
 ) -> None:
-    """Test platform setup fails when the server does not answer in time."""
-    mock_aprs_is.connect_allowed.clear()
-
-    await _async_setup(hass, {**CONFIG, CONF_TIMEOUT: 0.01})
-
-    assert PLATFORM_COMPONENT not in hass.config.components
-    assert "Timeout waiting for APRS to connect" in caplog.text
-
-
-async def test_stop(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
-    """Test the connection is closed when Home Assistant stops."""
-    await _async_setup(hass, CONFIG)
-
-    hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+    """Test a YAML device tracker is imported as a receiver."""
+    assert await async_setup_component(
+        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: YAML_CONFIG}
+    )
     await hass.async_block_till_done()
 
-    mock_aprs_is.client.close.assert_called_once_with()
-    await hass.async_add_executor_job(mock_aprs_is.join)
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    assert entries[0].unique_id == TEST_RECEIVER
+    assert entries[0].data == {
+        CONF_ENTRY_TYPE: ENTRY_TYPE_RECEIVER,
+        CONF_CALLSIGN: TEST_RECEIVER,
+        CONF_PASSWORD: TEST_PASSCODE,
+        CONF_HOST: TEST_SERVER,
+    }
+    assert entries[0].options == {CONF_CALLSIGNS: ["XX0FOO*", "YY0BAR-1"]}
+    assert issue_registry.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )
+
+
+@pytest.mark.usefixtures("mock_aprs_is", "mock_publisher_is")
+async def test_yaml_import_already_imported(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    mock_receiver_entry: MockConfigEntry,
+) -> None:
+    """Test the YAML is only imported once but still flagged."""
+    mock_receiver_entry.add_to_hass(hass)
+
+    assert await async_setup_component(
+        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: YAML_CONFIG}
+    )
+    await hass.async_block_till_done()
+
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert issue_registry.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("error", "issue_id"),
+    [
+        pytest.param(
+            AprsConnectionError("no banner from server"),
+            "yaml_import_cannot_connect",
+            id="cannot_connect",
+        ),
+        pytest.param(
+            LoginError("Password is incorrect"),
+            "yaml_import_invalid_auth",
+            id="invalid_auth",
+        ),
+    ],
+)
+async def test_yaml_import_error(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    mock_publisher_is: MagicMock,
+    error: Exception,
+    issue_id: str,
+) -> None:
+    """Test a failed import is reported instead of flagging the YAML."""
+    mock_publisher_is.connect.side_effect = error
+
+    assert await async_setup_component(
+        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: YAML_CONFIG}
+    )
+    await hass.async_block_till_done()
+
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    assert issue_registry.async_get_issue(DOMAIN, issue_id)
+    assert not issue_registry.async_get_issue(
+        HOMEASSISTANT_DOMAIN, f"deprecated_yaml_{DOMAIN}"
+    )

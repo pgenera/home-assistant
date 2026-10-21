@@ -1,12 +1,17 @@
 {
   "config": {
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:component::aprs::config::error::invalid_auth%]",
+      "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "The passcode is not valid for this callsign.",
       "invalid_callsign": "Enter a callsign, optionally with an SSID, such as N0CALL-13.",
+      "invalid_callsigns": "Enter one or more callsigns to track, such as N0CALL-9, or N0CALL* for every SSID.",
       "invalid_symbol": "Enter a symbol table character (/, \\ or an overlay letter or digit) followed by the symbol code, such as /_ for a weather station.",
       "unknown": "[%key:common::config_flow::error::unknown%]",
       "weather_symbol_required": "Weather data can only be sent with a weather station symbol, such as /_."
@@ -17,10 +22,25 @@
           "password": "Passcode"
         },
         "data_description": {
-          "password": "[%key:component::aprs::config::step::user::data_description::password%]"
+          "password": "[%key:component::aprs::config::step::station_login::data_description::password%]"
         },
         "description": "APRS-IS refused the passcode for {callsign}.",
         "title": "[%key:common::config_flow::title::reauth%]"
+      },
+      "receiver": {
+        "data": {
+          "callsign": "Login callsign",
+          "callsigns": "Tracked callsigns",
+          "host": "[%key:component::aprs::config::step::station_login::data::host%]",
+          "password": "[%key:component::aprs::config::step::station_login::data::password%]"
+        },
+        "data_description": {
+          "callsign": "Callsign to log in to APRS-IS with.",
+          "callsigns": "Stations to track. End a callsign with * to track every SSID. Weather stations are not tracked.",
+          "host": "APRS-IS server to receive from.",
+          "password": "Optional; leave empty to log in receive-only."
+        },
+        "title": "Track stations"
       },
       "station": {
         "data": {
@@ -56,7 +76,7 @@
         },
         "title": "Station"
       },
-      "user": {
+      "station_login": {
         "data": {
           "callsign": "Callsign",
           "host": "Server",
@@ -66,6 +86,14 @@
           "callsign": "Callsign and SSID the station reports as, such as N0CALL-13.",
           "host": "APRS-IS server to send reports to.",
           "password": "APRS-IS passcode for the callsign."
+        },
+        "title": "Station login"
+      },
+      "user": {
+        "description": "Publish your own position and weather to APRS-IS, or track other stations' positions.",
+        "menu_options": {
+          "receiver": "Track stations",
+          "station_login": "Publish a station"
         }
       }
     }
@@ -85,13 +113,33 @@
       "message": "APRS-IS refused the passcode for {callsign}."
     }
   },
+  "issues": {
+    "yaml_import_cannot_connect": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because Home Assistant could not connect to the APRS-IS server {host}.\n\nCheck that the server is reachable, then restart Home Assistant to try again, or remove the APRS `device_tracker` configuration from your configuration.yaml file and set up the APRS integration in the UI.",
+      "title": "The APRS YAML configuration could not be imported"
+    },
+    "yaml_import_invalid_auth": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because the APRS-IS server refused its passcode.\n\nFix or remove the `password` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
+      "title": "The APRS YAML configuration could not be imported"
+    }
+  },
   "options": {
     "error": {
+      "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]",
       "invalid_symbol": "[%key:component::aprs::config::error::invalid_symbol%]",
       "weather_symbol_required": "[%key:component::aprs::config::error::weather_symbol_required%]"
     },
     "step": {
-      "init": {
+      "receiver": {
+        "data": {
+          "callsigns": "[%key:component::aprs::config::step::receiver::data::callsigns%]"
+        },
+        "data_description": {
+          "callsigns": "[%key:component::aprs::config::step::receiver::data_description::callsigns%]"
+        },
+        "title": "[%key:component::aprs::config::step::receiver::title%]"
+      },
+      "station": {
         "data": {
           "comment": "[%key:component::aprs::config::step::station::data::comment%]",
           "location_entity": "[%key:component::aprs::config::step::station::data::location_entity%]",

@@ -1,13 +1,55 @@
 # serializer version: 1
-# name: test_position_report[ambiguity]
+# name: test_position_report[ambiguity][registry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'device_tracker',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'device_tracker.xx0foo_2',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': None,
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': None,
+    'platform': 'aprs',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'N0CALL_XX0FOO-2',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_position_report[ambiguity][state]
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'comment': '',
-      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_2',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'XX0FOO-2',
       <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 122,
+      <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+      ]),
       <EntityStateAttribute.LATITUDE: 'latitude'>: 49.05916666666667,
       <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.02916666666667,
       <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
     }),
     'context': <ANY>,
     'entity_id': 'device_tracker.xx0foo_2',
@@ -17,17 +59,59 @@
     'state': 'not_home',
   })
 # ---
-# name: test_position_report[compressed]
+# name: test_position_report[compressed][registry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'device_tracker',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'device_tracker.yy0bar_1',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': None,
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': None,
+    'platform': 'aprs',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'N0CALL_YY0BAR-1',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_position_report[compressed][state]
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'comment': '',
       'course': 88,
-      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'yy0bar_1',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'YY0BAR-1',
       <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+      ]),
       <EntityStateAttribute.LATITUDE: 'latitude'>: 49.5,
       <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.75000393777269,
       <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
       'speed': 67.1016865366881,
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
     }),
     'context': <ANY>,
     'entity_id': 'device_tracker.yy0bar_1',
@@ -37,18 +121,60 @@
     'state': 'not_home',
   })
 # ---
-# name: test_position_report[object]
+# name: test_position_report[object][registry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'device_tracker',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'device_tracker.v4310251',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': None,
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': None,
+    'platform': 'aprs',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'N0CALL_V4310251',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_position_report[object][state]
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'altitude': 10112.654400000001,
       'comment': 'Clb=3.5m/s calibration 21% 404.40MHz Type=RS41 batt=2.7V Details on http://radiosondy.info/',
       'course': 85,
-      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'v4310251',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'V4310251',
       <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+      ]),
       <EntityStateAttribute.LATITUDE: 'latitude'>: 51.09534249084249,
       <EntityStateAttribute.LONGITUDE: 'longitude'>: -1.5315201465201465,
       <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
       'speed': 44.448,
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
     }),
     'context': <ANY>,
     'entity_id': 'device_tracker.v4310251',
@@ -58,18 +184,60 @@
     'state': 'not_home',
   })
 # ---
-# name: test_position_report[uncompressed]
+# name: test_position_report[uncompressed][registry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': dict({
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'device_tracker',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'device_tracker.xx0foo_1',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': None,
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': None,
+    'platform': 'aprs',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'N0CALL_XX0FOO-1',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_position_report[uncompressed][state]
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'altitude': 376.1232,
       'comment': 'Mobile',
       'course': 90,
-      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_1',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'XX0FOO-1',
       <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+      ]),
       <EntityStateAttribute.LATITUDE: 'latitude'>: 49.05833333333333,
       <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.02916666666667,
       <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
       'speed': 66.672,
+      <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
     }),
     'context': <ANY>,
     'entity_id': 'device_tracker.xx0foo_1',
@@ -79,20 +247,25 @@
     'state': 'not_home',
   })
 # ---
-# name: test_position_report_invalid_ambiguity
-  StateSnapshot({
-    'attributes': ReadOnlyDict({
-      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_1',
-      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
-      <EntityStateAttribute.LATITUDE: 'latitude'>: 1.0,
-      <EntityStateAttribute.LONGITUDE: 'longitude'>: 2.0,
-      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
-    }),
-    'context': <ANY>,
-    'entity_id': 'device_tracker.xx0foo_1',
-    'last_changed': <ANY>,
-    'last_reported': <ANY>,
-    'last_updated': <ANY>,
-    'state': 'not_home',
+# name: test_restore[no_position]
+  ReadOnlyDict({
+    <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'XX0FOO-1',
+    <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+    ]),
+    <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+    <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+  })
+# ---
+# name: test_restore[position]
+  ReadOnlyDict({
+    'altitude': 376.1,
+    <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'XX0FOO-1',
+    <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 186,
+    <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+    ]),
+    <EntityStateAttribute.LATITUDE: 'latitude'>: 49.0583,
+    <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.0292,
+    <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+    <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
   })
 # ---
