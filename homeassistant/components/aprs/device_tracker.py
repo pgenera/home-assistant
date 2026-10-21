@@ -78,9 +78,9 @@ async def async_setup_scanner(
         },
     )
 
-    if result["type"] is FlowResultType.ABORT and result["reason"] in (
-        "cannot_connect",
-        "invalid_auth",
+    if (
+        result["type"] is FlowResultType.ABORT
+        and result["reason"] != "already_configured"
     ):
         ir.async_create_issue(
             hass,

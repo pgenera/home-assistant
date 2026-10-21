@@ -27,6 +27,6 @@
 # ---
 # name: test_weather_report_unusable_values
   list([
-    'N0CALL-13>APZHAS,TCPIP*:/210905z4233.78N/07052.15W_096/...g011t...r001p050P122',
+    'N0CALL-13>APZHAS,TCPIP*:/210905z4233.78N/07052.15W_.../...g011t...r001p050P122',
   ])
 # ---

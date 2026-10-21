@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import Any
 
 from aprslib import IS, ConnectionError as AprsConnectionError, LoginError
@@ -67,7 +68,7 @@ from .const import (
     WEATHER_SYMBOL_CODE,
 )
 from .packet import WeatherData, build_report, format_course_speed, format_position
-from .smartbeacon import STOPPED, Fix, beacon_rate, motion, turned
+from .smartbeacon import STOPPED, Fix, Motion, beacon_rate, motion, turned
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,6 +152,7 @@ class AprsPublisher:
         self._motion = STOPPED
         self._reported_fix: Fix | None = None
         self._reported_course: float | None = None
+        self._stop_unreported = False
         self._last_attempt: datetime | None = None
         self._failing = False
         self._suppress_failing = False
@@ -217,15 +219,24 @@ class AprsPublisher:
             fix := _fix_from_state(new_state)
         ) is None:
             return
-        if self._fix is not None:
-            if (fix.latitude, fix.longitude) == (
-                self._fix.latitude,
-                self._fix.longitude,
-            ):
+        if self._fix is None:
+            self._fix = fix
+        elif (fix.latitude, fix.longitude) == (self._fix.latitude, self._fix.longitude):
+            # The same position again a while later means the station stopped.
+            if fix.time - self._fix.time < MIN_TURN_TIME:
                 return
-            self._motion = motion(self._fix, fix)
-        self._fix = fix
+            self._set_motion(STOPPED)
+        else:
+            self._set_motion(motion(self._fix, fix))
+            self._fix = fix
         await self._async_evaluate()
+
+    def _set_motion(self, current: Motion) -> None:
+        if current.course is None:
+            self._stop_unreported |= self._motion.course is not None
+        else:
+            self._stop_unreported = False
+        self._motion = current
 
     async def _async_evaluate(self, *_: Any) -> None:
         """Send a report if SmartBeaconing says one is due."""
@@ -234,11 +245,15 @@ class AprsPublisher:
             if self._fix == self._reported_fix:
                 due = elapsed >= self._slow_rate
             else:
+                # Turning or stopping is worth reporting before the next one is due.
                 due = elapsed >= min(
                     beacon_rate(self._motion.speed), self._slow_rate
                 ) or (
-                    turned(self._reported_course, self._motion)
-                    and elapsed >= MIN_TURN_TIME
+                    elapsed >= MIN_TURN_TIME
+                    and (
+                        self._stop_unreported
+                        or turned(self._reported_course, self._motion)
+                    )
                 )
             if not due:
                 return
@@ -271,6 +286,8 @@ class AprsPublisher:
         try:
             value = float(state.state)
         except ValueError:
+            return None
+        if not math.isfinite(value):
             return None
         converter, aprs_unit = WEATHER_UNITS[key]
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
@@ -321,21 +338,22 @@ class AprsPublisher:
             _LOGGER.debug("Suppressed APRS-IS report for %s", self.client.callsign)
             return
         now = dt_util.utcnow()
-        self._last_attempt = now
         if self._fix == self._reported_fix:
             # Not having moved since the last report means stopped, whatever
             # speed was last worked out.
             self._motion = STOPPED
-        self._reported_fix = self._fix
-        self._reported_course = self._motion.course
         if (packet := self.build_report(now)) is None:
             self._set_failing(f"{self._location_entity} has no location")
             return
+        self._last_attempt = now
+        reported = (self._fix, self._motion.course)
         try:
             await self.hass.async_add_executor_job(self.client.send, packet)
         except (AprsConnectionError, LoginError) as err:
             self._set_failing(str(err))
             return
+        self._reported_fix, self._reported_course = reported
+        self._stop_unreported = False
         _LOGGER.debug("Sent %s", packet)
         if self._failing:
             _LOGGER.info("Sending APRS-IS reports for %s again", self.client.callsign)

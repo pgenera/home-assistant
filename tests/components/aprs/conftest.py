@@ -87,6 +87,7 @@ class MockAprsIs:
         self.mock_class = mock_class
         self.client = client = mock_class.return_value
         self._callback: Any = None
+        self._error: Exception = AprsConnectionError("connection dropped")
         self._consuming = threading.Event()
         self._wake = threading.Event()
         client.consumer.side_effect = self._consumer
@@ -99,7 +100,8 @@ class MockAprsIs:
         self._wake.wait()
         self._wake.clear()
         self._consuming.clear()
-        raise AprsConnectionError("connection dropped")
+        error, self._error = self._error, AprsConnectionError("connection dropped")
+        raise error
 
     async def async_wait_consuming(self, hass: HomeAssistant) -> None:
         """Wait until the receiver thread is reading packets."""
@@ -117,8 +119,12 @@ class MockAprsIs:
         await hass.async_add_executor_job(self._callback, packet)
         await hass.async_block_till_done()
 
-    def drop_connection(self) -> None:
-        """Make the server drop the connection."""
+    def drop_connection(self, error: Exception | None = None) -> None:
+        """Make the server drop the connection, or consumer() raise error."""
+        if error is not None:
+            self._error = error
+        # Cleared here too, so waiting for consuming waits for the next read.
+        self._consuming.clear()
         self._wake.set()
 
 

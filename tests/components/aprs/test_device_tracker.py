@@ -1,5 +1,6 @@
 """Test APRS device tracking."""
 
+import threading
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -280,6 +281,58 @@ async def test_reconnect(
     assert hass.states.get(TRACKER) is not None
 
 
+async def test_unexpected_error_reconnects(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test an unexpected error while reading reconnects instead of stopping."""
+    await _async_setup(hass, mock_receiver_entry)
+    await mock_aprs_is.async_wait_consuming(hass)
+
+    await hass.async_add_executor_job(
+        mock_aprs_is.drop_connection, KeyError("latitude")
+    )
+    await mock_aprs_is.async_receive(hass, POSITION)
+
+    assert f"Unexpected error reading from APRS-IS server {TEST_SERVER}" in caplog.text
+    assert mock_aprs_is.client.close.call_count == 1
+    assert mock_aprs_is.client.connect.call_count == 2
+    assert hass.states.get(TRACKER) is not None
+
+
+async def test_unload_while_reconnecting(
+    hass: HomeAssistant,
+    mock_receiver_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test unloading during a reconnect does not start reading the new socket."""
+    await _async_setup(hass, mock_receiver_entry)
+    await mock_aprs_is.async_wait_consuming(hass)
+    connecting = threading.Event()
+    release = threading.Event()
+    shut_down = threading.Event()
+
+    def _slow_connect() -> None:
+        connecting.set()
+        assert release.wait(5)
+
+    mock_aprs_is.client.connect.side_effect = _slow_connect
+    mock_aprs_is.client.sock.shutdown.side_effect = lambda how: shut_down.set()
+    await hass.async_add_executor_job(mock_aprs_is.drop_connection)
+    assert await hass.async_add_executor_job(connecting.wait, 5)
+
+    unload = hass.async_create_task(
+        hass.config_entries.async_unload(mock_receiver_entry.entry_id)
+    )
+    assert await hass.async_add_executor_job(shut_down.wait, 5)
+    release.set()
+    assert await unload
+
+    assert mock_aprs_is.client.consumer.call_count == 1
+
+
 @pytest.mark.usefixtures("mock_aprs_is")
 async def test_yaml_import(
     hass: HomeAssistant,
@@ -328,17 +381,31 @@ async def test_yaml_import_already_imported(
 
 
 @pytest.mark.parametrize(
-    ("error", "issue_id"),
+    ("config", "error", "issue_id"),
     [
         pytest.param(
+            YAML_CONFIG,
             AprsConnectionError("no banner from server"),
             "yaml_import_cannot_connect",
             id="cannot_connect",
         ),
         pytest.param(
+            YAML_CONFIG,
             LoginError("Password is incorrect"),
             "yaml_import_invalid_auth",
             id="invalid_auth",
+        ),
+        pytest.param(
+            {**YAML_CONFIG, CONF_CALLSIGNS: ["XX0*FOO"]},
+            None,
+            "yaml_import_invalid_callsigns",
+            id="invalid_callsigns",
+        ),
+        pytest.param(
+            YAML_CONFIG,
+            RuntimeError("boom"),
+            "yaml_import_unknown",
+            id="unknown",
         ),
     ],
 )
@@ -346,14 +413,15 @@ async def test_yaml_import_error(
     hass: HomeAssistant,
     issue_registry: ir.IssueRegistry,
     mock_publisher_is: MagicMock,
-    error: Exception,
+    config: dict[str, Any],
+    error: Exception | None,
     issue_id: str,
 ) -> None:
     """Test a failed import is reported instead of flagging the YAML."""
     mock_publisher_is.connect.side_effect = error
 
     assert await async_setup_component(
-        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: YAML_CONFIG}
+        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: config}
     )
     await hass.async_block_till_done()
 

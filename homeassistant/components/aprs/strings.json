@@ -123,6 +123,14 @@
     "yaml_import_invalid_auth": {
       "description": "Importing the APRS device tracker configuration for {callsign} failed because the APRS-IS server refused its passcode.\n\nFix or remove the `password` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
       "title": "The APRS YAML configuration could not be imported"
+    },
+    "yaml_import_invalid_callsigns": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because its `callsigns` are not valid. Each must be a callsign, optionally with an SSID or ending in * for every SSID.\n\nFix the `callsigns` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
+    },
+    "yaml_import_unknown": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed with an unexpected error; check the logs for details.\n\nRestart Home Assistant to try again, or remove the APRS `device_tracker` configuration from your configuration.yaml file and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
     }
   },
   "options": {

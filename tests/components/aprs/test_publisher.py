@@ -121,6 +121,7 @@ async def test_weather_report_unusable_values(
             **WEATHER_STATES,
             "sensor.temperature": (STATE_UNAVAILABLE, "°C"),
             "sensor.humidity": ("wet", "%"),
+            "sensor.wind_direction": ("nan", "°"),
             "sensor.pressure": ("1023.7", "W"),
             "sensor.irradiance": ("50", "BTU/(h⋅ft²)"),
         },
@@ -214,6 +215,74 @@ async def test_smart_beaconing(
 
     await _async_tick(hass, freezer, timedelta(minutes=1, seconds=1))
     assert _sent(mock_publisher_is) == snapshot
+
+
+@pytest.mark.parametrize("options", [MOVING_OPTIONS])
+async def test_stop_reported(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+) -> None:
+    """Test stopping is reported soon, without the speed from before."""
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_config_entry)
+
+    # 60 mph north, not due yet; then the same position a minute later.
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0, gps_accuracy=5)
+    await hass.async_block_till_done()
+
+    assert _sent(mock_publisher_is)[1:] == [
+        "N0CALL-13>APZHAS,TCPIP*:/210907z4230.87N/07100.00W>"
+    ]
+
+
+@pytest.mark.parametrize("options", [MOVING_OPTIONS])
+async def test_location_appears(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+) -> None:
+    """Test the first position is sent as soon as the entity has one."""
+    await _async_setup(hass, mock_config_entry)
+    assert _sent(mock_publisher_is) == []
+
+    _move(hass, 42.5, -71.0)
+    await hass.async_block_till_done()
+
+    assert _sent(mock_publisher_is) == [
+        "N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>"
+    ]
+
+
+@pytest.mark.parametrize("options", [MOVING_OPTIONS])
+async def test_failed_report_not_counted(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+) -> None:
+    """Test a position that failed to send is sent again when next due."""
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_config_entry)
+    mock_publisher_is.sendall.side_effect = AprsConnectionError("not connected")
+
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    await _async_tick(hass, freezer, timedelta(seconds=121))
+    assert len(_sent(mock_publisher_is)) == 2
+
+    # Due again 3 minutes after the failed attempt, at the speed it was going.
+    mock_publisher_is.sendall.side_effect = None
+    await _async_tick(hass, freezer, timedelta(minutes=3, seconds=30))
+    assert _sent(mock_publisher_is)[2] == (
+        "N0CALL-13>APZHAS,TCPIP*:/210911z4230.87N/07100.00W>360/052"
+    )
+    assert hass.states.get(LAST_REPORT).state == "2026-10-21T09:11:31+00:00"
 
 
 @pytest.mark.parametrize("options", [MOVING_OPTIONS])

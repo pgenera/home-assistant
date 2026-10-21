@@ -163,6 +163,10 @@ class AprsReceiver:
                 except AprsConnectionError, LoginError:
                     self._stopping.wait(RECONNECT_DELAY)
                     continue
+                # stop() may have shut down the old socket while this one was
+                # connecting, and nothing would wake us from reading it.
+                if self._stopping.is_set():
+                    return
                 _LOGGER.info("Reconnected to APRS-IS server %s", self._host)
                 connected = True
             try:
@@ -173,7 +177,14 @@ class AprsReceiver:
                 _LOGGER.warning(
                     "Lost connection to APRS-IS server %s, reconnecting", self._host
                 )
-                connected = False
+            except Exception:
+                # Anything else would end the thread and silently stop tracking.
+                _LOGGER.exception(
+                    "Unexpected error reading from APRS-IS server %s, reconnecting",
+                    self._host,
+                )
+                self._ais.close()
+            connected = False
 
     def _receive(self, msg: dict[str, Any]) -> None:
         _LOGGER.debug("APRS message received: %s", msg)
