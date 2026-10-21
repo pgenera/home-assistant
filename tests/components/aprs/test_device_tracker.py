@@ -1,382 +1,235 @@
 """Test APRS device tracker."""
 
-from collections.abc import Generator
-from unittest.mock import MagicMock, Mock, patch
+from typing import Any
 
 import aprslib
-from aprslib import IS
+from aprslib import ConnectionError as AprsConnectionError, LoginError
 import pytest
+from syrupy.assertion import SnapshotAssertion
 
 from homeassistant.components.aprs import device_tracker
+from homeassistant.components.device_tracker import DOMAIN as DEVICE_TRACKER_DOMAIN
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_PLATFORM,
+    CONF_TIMEOUT,
+    CONF_USERNAME,
+    EVENT_HOMEASSISTANT_STOP,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 
-DEFAULT_PORT = 14580
+from .conftest import MockAprsIs
 
 TEST_CALLSIGN = "testcall"
-TEST_COORDS_NULL_ISLAND = (0, 0)
-TEST_FILTER = "testfilter"
 TEST_HOST = "testhost"
 TEST_PASSWORD = "testpass"
+TEST_COORDS_NULL_ISLAND = (0, 0)
+PLATFORM_COMPONENT = "aprs.device_tracker"
+
+CONFIG = {
+    CONF_PLATFORM: "aprs",
+    CONF_USERNAME: TEST_CALLSIGN,
+    CONF_PASSWORD: TEST_PASSWORD,
+    CONF_HOST: TEST_HOST,
+    device_tracker.CONF_CALLSIGNS: ["XX0FOO*", "YY0BAR-1"],
+}
 
 
-@pytest.fixture(name="mock_ais")
-def mock_ais() -> Generator[MagicMock]:
-    """Mock aprslib."""
-    with patch("aprslib.IS") as mock_ais:
-        yield mock_ais
-
-
-def test_make_filter() -> None:
-    """Test filter."""
-    callsigns = ["CALLSIGN1", "callsign2"]
-    res = device_tracker.make_filter(callsigns)
-    assert res == "b/CALLSIGN1 b/CALLSIGN2"
-
-
-def test_gps_accuracy_0() -> None:
-    """Test GPS accuracy level 0."""
-    acc = device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, 0)
-    assert acc == 0
-
-
-def test_gps_accuracy_1() -> None:
-    """Test GPS accuracy level 1."""
-    acc = device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, 1)
-    assert acc == 186
-
-
-def test_gps_accuracy_2() -> None:
-    """Test GPS accuracy level 2."""
-    acc = device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, 2)
-    assert acc == 1855
-
-
-def test_gps_accuracy_3() -> None:
-    """Test GPS accuracy level 3."""
-    acc = device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, 3)
-    assert acc == 18553
-
-
-def test_gps_accuracy_4() -> None:
-    """Test GPS accuracy level 4."""
-    acc = device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, 4)
-    assert acc == 111319
-
-
-def test_gps_accuracy_invalid_int() -> None:
-    """Test GPS accuracy with invalid input."""
-    level = 5
-
-    try:
-        device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, level)
-        pytest.fail("No exception.")
-    except ValueError:
-        pass
-
-
-def test_gps_accuracy_invalid_string() -> None:
-    """Test GPS accuracy with invalid input."""
-    level = "not an int"
-
-    try:
-        device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, level)
-        pytest.fail("No exception.")
-    except ValueError:
-        pass
-
-
-def test_gps_accuracy_invalid_float() -> None:
-    """Test GPS accuracy with invalid input."""
-    level = 1.2
-
-    try:
-        device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, level)
-        pytest.fail("No exception.")
-    except ValueError:
-        pass
-
-
-def test_aprs_listener(mock_ais: MagicMock) -> None:
-    """Test listener thread."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    port = DEFAULT_PORT
-    see = Mock()
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
+async def _async_setup(hass: HomeAssistant, config: dict[str, Any]) -> None:
+    assert await async_setup_component(
+        hass, DEVICE_TRACKER_DOMAIN, {DEVICE_TRACKER_DOMAIN: config}
     )
-    listener.run()
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_success
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    mock_ais.assert_called_with(callsign, passwd=password, host=host, port=port)
+    await hass.async_block_till_done()
 
 
-def test_aprs_listener_start_fail() -> None:
-    """Test listener thread start failure."""
-    with patch.object(
-        IS, "connect", side_effect=aprslib.ConnectionError("Unable to connect.")
-    ):
-        callsign = TEST_CALLSIGN
-        password = TEST_PASSWORD
-        host = TEST_HOST
-        server_filter = TEST_FILTER
-        see = Mock()
-
-        listener = device_tracker.AprsListenerThread(
-            callsign, password, host, server_filter, see
-        )
-        listener.run()
-
-        assert listener.callsign == callsign
-        assert listener.host == host
-        assert listener.server_filter == server_filter
-        assert listener.see == see
-        assert listener.start_event.is_set()
-        assert not listener.start_success
-        assert listener.start_message == "Unable to connect."
+@pytest.mark.parametrize(
+    ("callsigns", "expected"),
+    [
+        pytest.param(["CALLSIGN1", "callsign2"], "b/CALLSIGN1 b/CALLSIGN2", id="two"),
+        pytest.param(["xx0foo*"], "b/XX0FOO*", id="wildcard"),
+    ],
+)
+def test_make_filter(callsigns: list[str], expected: str) -> None:
+    """Test the server-side filter built from callsigns."""
+    assert device_tracker.make_filter(callsigns) == expected
 
 
-def test_aprs_listener_stop(mock_ais: MagicMock) -> None:
-    """Test listener thread stop."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
-    )
-    listener.ais.close = Mock()
-    listener.run()
-    listener.stop()
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    assert listener.start_success
-    listener.ais.close.assert_called_with()
-
-
-def test_aprs_listener_rx_msg(mock_ais: MagicMock) -> None:
-    """Test rx_msg."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
-
-    sample_msg = {
-        device_tracker.ATTR_FORMAT: "uncompressed",
-        device_tracker.ATTR_FROM: "ZZ0FOOBAR-1",
-        device_tracker.ATTR_LATITUDE: 0.0,
-        device_tracker.ATTR_LONGITUDE: 0.0,
-        device_tracker.ATTR_ALTITUDE: 0,
-    }
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
-    )
-    listener.run()
-    listener.rx_msg(sample_msg)
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_success
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    see.assert_called_with(
-        dev_id=device_tracker.slugify("ZZ0FOOBAR-1"),
-        gps=(0.0, 0.0),
-        attributes={"altitude": 0},
+@pytest.mark.parametrize(
+    ("posambiguity", "accuracy"),
+    [(0, 0), (1, 186), (2, 1855), (3, 18553), (4, 111319)],
+)
+def test_gps_accuracy(posambiguity: int, accuracy: int) -> None:
+    """Test GPS accuracy for each APRS position ambiguity level."""
+    assert device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity) == (
+        accuracy
     )
 
 
-def test_aprs_listener_rx_msg_ambiguity(mock_ais: MagicMock) -> None:
-    """Test rx_msg with posambiguity."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
+@pytest.mark.parametrize("posambiguity", [5, "not an int", 1.2])
+def test_gps_accuracy_invalid(posambiguity: Any) -> None:
+    """Test GPS accuracy with invalid position ambiguity."""
+    with pytest.raises(ValueError, match="APRS position ambiguity must be 0-4"):
+        device_tracker.gps_accuracy(TEST_COORDS_NULL_ISLAND, posambiguity)
 
-    sample_msg = {
-        device_tracker.ATTR_FORMAT: "uncompressed",
-        device_tracker.ATTR_FROM: "ZZ0FOOBAR-1",
-        device_tracker.ATTR_LATITUDE: 0.0,
-        device_tracker.ATTR_LONGITUDE: 0.0,
-        device_tracker.ATTR_POS_AMBIGUITY: 1,
-    }
 
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
+async def test_setup(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
+    """Test the platform connects with the configured login and filter."""
+    await _async_setup(hass, CONFIG)
+
+    assert PLATFORM_COMPONENT in hass.config.components
+    mock_aprs_is.mock_class.assert_called_once_with(
+        TEST_CALLSIGN, passwd=TEST_PASSWORD, host=TEST_HOST, port=14580
     )
-    listener.run()
-    listener.rx_msg(sample_msg)
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_success
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    see.assert_called_with(
-        dev_id=device_tracker.slugify("ZZ0FOOBAR-1"),
-        gps=(0.0, 0.0),
-        attributes={device_tracker.ATTR_GPS_ACCURACY: 186},
-    )
+    mock_aprs_is.client.set_filter.assert_called_once_with("b/XX0FOO* b/YY0BAR-1")
+    mock_aprs_is.client.connect.assert_called_once_with()
 
 
-def test_aprs_listener_rx_msg_ambiguity_invalid(mock_ais: MagicMock) -> None:
-    """Test rx_msg with invalid posambiguity."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
-
-    sample_msg = {
-        device_tracker.ATTR_FORMAT: "uncompressed",
-        device_tracker.ATTR_FROM: "ZZ0FOOBAR-1",
-        device_tracker.ATTR_LATITUDE: 0.0,
-        device_tracker.ATTR_LONGITUDE: 0.0,
-        device_tracker.ATTR_POS_AMBIGUITY: 5,
-    }
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
-    )
-    listener.run()
-    listener.rx_msg(sample_msg)
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_success
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    see.assert_called_with(
-        dev_id=device_tracker.slugify("ZZ0FOOBAR-1"), gps=(0.0, 0.0), attributes={}
-    )
-
-
-def test_aprs_listener_rx_msg_no_position(mock_ais: MagicMock) -> None:
-    """Test rx_msg with non-position report."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
-
-    sample_msg = {device_tracker.ATTR_FORMAT: "invalid"}
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
-    )
-    listener.run()
-    listener.rx_msg(sample_msg)
-
-    assert listener.callsign == callsign
-    assert listener.host == host
-    assert listener.server_filter == server_filter
-    assert listener.see == see
-    assert listener.start_event.is_set()
-    assert listener.start_success
-    assert listener.start_message == "Connected to testhost with callsign testcall."
-    see.assert_not_called()
-
-
-def test_aprs_listener_rx_msg_object(mock_ais: MagicMock) -> None:
-    """Test rx_msg with object."""
-    callsign = TEST_CALLSIGN
-    password = TEST_PASSWORD
-    host = TEST_HOST
-    server_filter = TEST_FILTER
-    see = Mock()
-
-    sample_msg = aprslib.parse(
-        "CEEWO2-14>APLWS2,qAU,CEEWO2-15:;V4310251 "
-        "*121203h5105.72N/00131.89WO085/024/A=033178"
-        "!w&,!Clb=3.5m/s calibration 21% 404.40MHz "
-        "Type=RS41 batt=2.7V Details on "
-        "http://radiosondy.info/"
-    )
-
-    listener = device_tracker.AprsListenerThread(
-        callsign, password, host, server_filter, see
-    )
-    listener.run()
-    listener.rx_msg(sample_msg)
-
-    see.assert_called_with(
-        dev_id=device_tracker.slugify("V4310251"),
-        gps=(51.09534249084249, -1.5315201465201465),
-        attributes={
-            "gps_accuracy": 0,
-            "altitude": 10112.654400000001,
-            "comment": (
-                "Clb=3.5m/s calibration 21% 404.40MHz"
-                " Type=RS41 batt=2.7V Details on"
-                " http://radiosondy.info/"
-            ),
-            "course": 85,
-            "speed": 44.448,
+async def test_setup_defaults(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
+    """Test the default server and receive-only passcode."""
+    await _async_setup(
+        hass,
+        {
+            CONF_PLATFORM: "aprs",
+            CONF_USERNAME: TEST_CALLSIGN,
+            device_tracker.CONF_CALLSIGNS: "XX0FOO",
         },
     )
 
-
-async def test_setup_scanner(hass: HomeAssistant) -> None:
-    """Test setup_scanner."""
-    with patch(
-        "homeassistant.components.aprs.device_tracker.AprsListenerThread"
-    ) as listener:
-        config = {
-            "username": TEST_CALLSIGN,
-            "password": TEST_PASSWORD,
-            "host": TEST_HOST,
-            "callsigns": ["XX0FOO*", "YY0BAR-1"],
-            "timeout": device_tracker.DEFAULT_TIMEOUT,
-        }
-
-        see = Mock()
-        res = await hass.async_add_executor_job(
-            device_tracker.setup_scanner, hass, config, see
-        )
-
-        assert res
-        listener.assert_called_with(
-            TEST_CALLSIGN, TEST_PASSWORD, TEST_HOST, "b/XX0FOO* b/YY0BAR-1", see
-        )
+    mock_aprs_is.mock_class.assert_called_once_with(
+        TEST_CALLSIGN, passwd="-1", host="rotate.aprs2.net", port=14580
+    )
+    mock_aprs_is.client.set_filter.assert_called_once_with("b/XX0FOO")
 
 
-async def test_setup_scanner_timeout(hass: HomeAssistant) -> None:
-    """Test setup_scanner failure from timeout."""
-    with patch.object(IS, "connect", side_effect=TimeoutError):
-        config = {
-            "username": TEST_CALLSIGN,
-            "password": TEST_PASSWORD,
-            "host": "localhost",
-            "timeout": 0.01,
-            "callsigns": ["XX0FOO*", "YY0BAR-1"],
-        }
+@pytest.mark.usefixtures("mock_device_tracker_conf")
+@pytest.mark.parametrize(
+    ("raw_packet", "entity_id"),
+    [
+        pytest.param(
+            "XX0FOO-1>APRS,TCPIP*:!4903.50N/07201.75W>090/036/A=001234Mobile",
+            "device_tracker.xx0foo_1",
+            id="uncompressed",
+        ),
+        pytest.param(
+            "XX0FOO-2>APRS,TCPIP*:!4903.5 N/07201.7 W-",
+            "device_tracker.xx0foo_2",
+            id="ambiguity",
+        ),
+        pytest.param(
+            "YY0BAR-1>APRS,TCPIP*:!/5L!!<*e7>7P[",
+            "device_tracker.yy0bar_1",
+            id="compressed",
+        ),
+        pytest.param(
+            "CEEWO2-14>APLWS2,qAU,CEEWO2-15:;V4310251 "
+            "*121203h5105.72N/00131.89WO085/024/A=033178"
+            "!w&,!Clb=3.5m/s calibration 21% 404.40MHz "
+            "Type=RS41 batt=2.7V Details on "
+            "http://radiosondy.info/",
+            "device_tracker.v4310251",
+            id="object",
+        ),
+    ],
+)
+async def test_position_report(
+    hass: HomeAssistant,
+    mock_aprs_is: MockAprsIs,
+    snapshot: SnapshotAssertion,
+    raw_packet: str,
+    entity_id: str,
+) -> None:
+    """Test position reports update device trackers."""
+    await _async_setup(hass, CONFIG)
 
-        see = Mock()
-        assert not await hass.async_add_executor_job(
-            device_tracker.setup_scanner, hass, config, see
-        )
+    await mock_aprs_is.async_receive(hass, aprslib.parse(raw_packet))
+
+    assert hass.states.get(entity_id) == snapshot
+
+
+@pytest.mark.usefixtures("mock_device_tracker_conf")
+async def test_position_report_invalid_ambiguity(
+    hass: HomeAssistant,
+    mock_aprs_is: MockAprsIs,
+    caplog: pytest.LogCaptureFixture,
+    snapshot: SnapshotAssertion,
+) -> None:
+    """Test a report with invalid position ambiguity is used without accuracy."""
+    await _async_setup(hass, CONFIG)
+
+    await mock_aprs_is.async_receive(
+        hass,
+        {
+            "format": "uncompressed",
+            "from": "XX0FOO-1",
+            "latitude": 1.0,
+            "longitude": 2.0,
+            "posambiguity": 5,
+        },
+    )
+
+    assert "APRS message contained invalid posambiguity: 5" in caplog.text
+    assert hass.states.get("device_tracker.xx0foo_1") == snapshot
+
+
+@pytest.mark.usefixtures("mock_device_tracker_conf")
+async def test_non_position_report(
+    hass: HomeAssistant, mock_aprs_is: MockAprsIs
+) -> None:
+    """Test packets without a position are ignored."""
+    await _async_setup(hass, CONFIG)
+
+    await mock_aprs_is.async_receive(
+        hass, aprslib.parse("XX0FOO-1>APRS,TCPIP*::YY0BAR-1 :Hello{1")
+    )
+
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(AprsConnectionError("Unable to connect."), id="connection"),
+        pytest.param(LoginError("Password is incorrect"), id="login"),
+    ],
+)
+async def test_setup_connect_error(
+    hass: HomeAssistant,
+    mock_aprs_is: MockAprsIs,
+    caplog: pytest.LogCaptureFixture,
+    error: Exception,
+) -> None:
+    """Test a failed connection fails platform setup."""
+    mock_aprs_is.client.connect.side_effect = error
+
+    await _async_setup(hass, CONFIG)
+
+    assert PLATFORM_COMPONENT not in hass.config.components
+    assert str(error) in caplog.text
+    mock_aprs_is.client.consumer.assert_not_called()
+
+
+async def test_setup_timeout(
+    hass: HomeAssistant,
+    mock_aprs_is: MockAprsIs,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test platform setup fails when the server does not answer in time."""
+    mock_aprs_is.connect_allowed.clear()
+
+    await _async_setup(hass, {**CONFIG, CONF_TIMEOUT: 0.01})
+
+    assert PLATFORM_COMPONENT not in hass.config.components
+    assert "Timeout waiting for APRS to connect" in caplog.text
+
+
+async def test_stop(hass: HomeAssistant, mock_aprs_is: MockAprsIs) -> None:
+    """Test the connection is closed when Home Assistant stops."""
+    await _async_setup(hass, CONFIG)
+
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+    await hass.async_block_till_done()
+
+    mock_aprs_is.client.close.assert_called_once_with()
+    await hass.async_add_executor_job(mock_aprs_is.join)

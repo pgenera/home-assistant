@@ -1,0 +1,98 @@
+# serializer version: 1
+# name: test_position_report[ambiguity]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'comment': '',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_2',
+      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 122,
+      <EntityStateAttribute.LATITUDE: 'latitude'>: 49.05916666666667,
+      <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.02916666666667,
+      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'device_tracker.xx0foo_2',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'not_home',
+  })
+# ---
+# name: test_position_report[compressed]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'comment': '',
+      'course': 88,
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'yy0bar_1',
+      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <EntityStateAttribute.LATITUDE: 'latitude'>: 49.5,
+      <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.75000393777269,
+      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+      'speed': 67.1016865366881,
+    }),
+    'context': <ANY>,
+    'entity_id': 'device_tracker.yy0bar_1',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'not_home',
+  })
+# ---
+# name: test_position_report[object]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'altitude': 10112.654400000001,
+      'comment': 'Clb=3.5m/s calibration 21% 404.40MHz Type=RS41 batt=2.7V Details on http://radiosondy.info/',
+      'course': 85,
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'v4310251',
+      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <EntityStateAttribute.LATITUDE: 'latitude'>: 51.09534249084249,
+      <EntityStateAttribute.LONGITUDE: 'longitude'>: -1.5315201465201465,
+      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+      'speed': 44.448,
+    }),
+    'context': <ANY>,
+    'entity_id': 'device_tracker.v4310251',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'not_home',
+  })
+# ---
+# name: test_position_report[uncompressed]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'altitude': 376.1232,
+      'comment': 'Mobile',
+      'course': 90,
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_1',
+      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <EntityStateAttribute.LATITUDE: 'latitude'>: 49.05833333333333,
+      <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.02916666666667,
+      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+      'speed': 66.672,
+    }),
+    'context': <ANY>,
+    'entity_id': 'device_tracker.xx0foo_1',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'not_home',
+  })
+# ---
+# name: test_position_report_invalid_ambiguity
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'xx0foo_1',
+      <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 0,
+      <EntityStateAttribute.LATITUDE: 'latitude'>: 1.0,
+      <EntityStateAttribute.LONGITUDE: 'longitude'>: 2.0,
+      <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'device_tracker.xx0foo_1',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'not_home',
+  })
+# ---
