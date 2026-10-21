@@ -74,6 +74,7 @@ FLOWS = {
         "apcupsd",
         "apple_tv",
         "aprilaire",
+        "aprs",
         "apsystems",
         "aquacell",
         "aqualogic",

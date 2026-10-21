@@ -1,0 +1,130 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "The passcode is not valid for this callsign.",
+      "invalid_callsign": "Enter a callsign, optionally with an SSID, such as N0CALL-13.",
+      "invalid_symbol": "Enter a symbol table character (/, \\ or an overlay letter or digit) followed by the symbol code, such as /_ for a weather station.",
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "weather_symbol_required": "Weather data can only be sent with a weather station symbol, such as /_."
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "password": "Passcode"
+        },
+        "data_description": {
+          "password": "[%key:component::aprs::config::step::user::data_description::password%]"
+        },
+        "description": "APRS-IS refused the passcode for {callsign}.",
+        "title": "[%key:common::config_flow::title::reauth%]"
+      },
+      "station": {
+        "data": {
+          "comment": "Comment",
+          "location_entity": "Location",
+          "position_ambiguity": "Position ambiguity",
+          "symbol": "Symbol"
+        },
+        "data_description": {
+          "comment": "Text sent at the end of each report.",
+          "location_entity": "Zone, person or device tracker whose position is reported. Moving entities are reported when they move, at most every 2 minutes.",
+          "position_ambiguity": "Number of trailing position digits to leave out, from 0 (exact) to 4 (nearest degree).",
+          "symbol": "APRS symbol table and code, such as /_ for a weather station or /- for a house."
+        },
+        "description": "Choose what the station reports. Reports with weather are sent every 10 minutes, position-only reports every 30 minutes.",
+        "sections": {
+          "weather": {
+            "data": {
+              "humidity": "Humidity",
+              "luminosity": "Luminosity",
+              "pressure": "Sea level pressure",
+              "rain_1h": "Rain in the last hour",
+              "rain_24h": "Rain in the last 24 hours",
+              "rain_since_midnight": "Rain since midnight",
+              "temperature": "Temperature",
+              "wind_direction": "Wind direction",
+              "wind_gust": "Wind gust",
+              "wind_speed": "Wind speed"
+            },
+            "description": "Sensors to report. Values are converted to APRS units; unavailable sensors are left out.",
+            "name": "Weather"
+          }
+        },
+        "title": "Station"
+      },
+      "user": {
+        "data": {
+          "callsign": "Callsign",
+          "host": "Server",
+          "password": "Passcode"
+        },
+        "data_description": {
+          "callsign": "Callsign and SSID the station reports as, such as N0CALL-13.",
+          "host": "APRS-IS server to send reports to.",
+          "password": "APRS-IS passcode for the callsign."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_report": {
+        "name": "Last report"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Could not connect to APRS-IS server {host}."
+    },
+    "invalid_auth": {
+      "message": "APRS-IS refused the passcode for {callsign}."
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_symbol": "[%key:component::aprs::config::error::invalid_symbol%]",
+      "weather_symbol_required": "[%key:component::aprs::config::error::weather_symbol_required%]"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "comment": "[%key:component::aprs::config::step::station::data::comment%]",
+          "location_entity": "[%key:component::aprs::config::step::station::data::location_entity%]",
+          "position_ambiguity": "[%key:component::aprs::config::step::station::data::position_ambiguity%]",
+          "symbol": "[%key:component::aprs::config::step::station::data::symbol%]"
+        },
+        "data_description": {
+          "comment": "[%key:component::aprs::config::step::station::data_description::comment%]",
+          "location_entity": "[%key:component::aprs::config::step::station::data_description::location_entity%]",
+          "position_ambiguity": "[%key:component::aprs::config::step::station::data_description::position_ambiguity%]",
+          "symbol": "[%key:component::aprs::config::step::station::data_description::symbol%]"
+        },
+        "description": "[%key:component::aprs::config::step::station::description%]",
+        "sections": {
+          "weather": {
+            "data": {
+              "humidity": "[%key:component::aprs::config::step::station::sections::weather::data::humidity%]",
+              "luminosity": "[%key:component::aprs::config::step::station::sections::weather::data::luminosity%]",
+              "pressure": "[%key:component::aprs::config::step::station::sections::weather::data::pressure%]",
+              "rain_1h": "[%key:component::aprs::config::step::station::sections::weather::data::rain_1h%]",
+              "rain_24h": "[%key:component::aprs::config::step::station::sections::weather::data::rain_24h%]",
+              "rain_since_midnight": "[%key:component::aprs::config::step::station::sections::weather::data::rain_since_midnight%]",
+              "temperature": "[%key:component::aprs::config::step::station::sections::weather::data::temperature%]",
+              "wind_direction": "[%key:component::aprs::config::step::station::sections::weather::data::wind_direction%]",
+              "wind_gust": "[%key:component::aprs::config::step::station::sections::weather::data::wind_gust%]",
+              "wind_speed": "[%key:component::aprs::config::step::station::sections::weather::data::wind_speed%]"
+            },
+            "description": "[%key:component::aprs::config::step::station::sections::weather::description%]",
+            "name": "[%key:component::aprs::config::step::station::sections::weather::name%]"
+          }
+        },
+        "title": "[%key:component::aprs::config::step::station::title%]"
+      }
+    }
+  }
+}

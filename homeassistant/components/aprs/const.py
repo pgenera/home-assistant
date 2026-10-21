@@ -1,0 +1,41 @@
+"""Constants for the APRS integration."""
+
+from datetime import timedelta
+from typing import Final
+
+DOMAIN: Final = "aprs"
+
+CONF_CALLSIGN: Final = "callsign"
+CONF_COMMENT: Final = "comment"
+CONF_LOCATION_ENTITY: Final = "location_entity"
+CONF_POSITION_AMBIGUITY: Final = "position_ambiguity"
+CONF_SYMBOL: Final = "symbol"
+CONF_WEATHER: Final = "weather"
+
+CONF_HUMIDITY: Final = "humidity"
+CONF_LUMINOSITY: Final = "luminosity"
+CONF_PRESSURE: Final = "pressure"
+CONF_RAIN_1H: Final = "rain_1h"
+CONF_RAIN_24H: Final = "rain_24h"
+CONF_RAIN_SINCE_MIDNIGHT: Final = "rain_since_midnight"
+CONF_TEMPERATURE: Final = "temperature"
+CONF_WIND_DIRECTION: Final = "wind_direction"
+CONF_WIND_GUST: Final = "wind_gust"
+CONF_WIND_SPEED: Final = "wind_speed"
+
+DEFAULT_HOST: Final = "rotate.aprs2.net"
+DEFAULT_LOCATION_ENTITY: Final = "zone.home"
+DEFAULT_SYMBOL: Final = "/_"
+
+FILTER_PORT: Final = 14580
+
+# APZ is the experimental software range of the APRS tocall registry.
+TOCALL: Final = "APZHAS"
+
+WEATHER_SYMBOL_CODE: Final = "_"
+
+# Weather networks ask for one report every 5-10 minutes; fixed positions
+# need far less.
+WEATHER_INTERVAL: Final = timedelta(minutes=10)
+POSITION_INTERVAL: Final = timedelta(minutes=30)
+MOVING_MIN_INTERVAL: Final = timedelta(minutes=2)
