@@ -40,9 +40,10 @@ WEATHER_SYMBOL_CODE: Final = "_"
 WEATHER_INTERVAL: Final = timedelta(minutes=10)
 POSITION_INTERVAL: Final = timedelta(minutes=30)
 
-# SmartBeaconing, with the usual tracker defaults: POSITION_INTERVAL at or
-# below SLOW_SPEED, FAST_RATE at or above FAST_SPEED, and a report after a
-# turn of more than MIN_TURN_ANGLE + TURN_SLOPE / speed degrees.
+# SmartBeaconing™ (a trademark of HamHUD.net), with the usual tracker
+# defaults: POSITION_INTERVAL at or below SLOW_SPEED, FAST_RATE at or above
+# FAST_SPEED, and a report after a turn of more than
+# MIN_TURN_ANGLE + TURN_SLOPE / speed degrees.
 SLOW_SPEED: Final = 5
 FAST_SPEED: Final = 60
 FAST_RATE: Final = timedelta(minutes=3)

@@ -1,4 +1,7 @@
-"""Decide when a moving station reports, using SmartBeaconing."""
+"""Decide when a moving station reports, using SmartBeaconing.
+
+SmartBeaconing™ is a trademark of HamHUD.net.
+"""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
