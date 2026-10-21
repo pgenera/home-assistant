@@ -47,12 +47,14 @@
           "comment": "Comment",
           "location_entity": "Location",
           "position_ambiguity": "Position ambiguity",
+          "suppress_template": "Suppress reports when",
           "symbol": "Symbol"
         },
         "data_description": {
           "comment": "Text sent at the end of each report.",
-          "location_entity": "Zone, person or device tracker whose position is reported. Moving entities are reported when they move, at most every 2 minutes.",
+          "location_entity": "Zone, person or device tracker whose position is reported. Moving entities report more often the faster they go, from every 30 minutes when stopped to every 3 minutes at 60 mph, and soon after turning; their course and speed are included.",
           "position_ambiguity": "Number of trailing position digits to leave out, from 0 (exact) to 4 (nearest degree).",
+          "suppress_template": "Optional template; while it renders true, no reports are sent, for example near home. If it fails to render, reports are held back too.",
           "symbol": "APRS symbol table and code, such as /_ for a weather station or /- for a house."
         },
         "description": "Choose what the station reports. Reports with weather are sent every 10 minutes, position-only reports every 30 minutes.",
@@ -144,12 +146,14 @@
           "comment": "[%key:component::aprs::config::step::station::data::comment%]",
           "location_entity": "[%key:component::aprs::config::step::station::data::location_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data::position_ambiguity%]",
+          "suppress_template": "[%key:component::aprs::config::step::station::data::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data::symbol%]"
         },
         "data_description": {
           "comment": "[%key:component::aprs::config::step::station::data_description::comment%]",
           "location_entity": "[%key:component::aprs::config::step::station::data_description::location_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data_description::position_ambiguity%]",
+          "suppress_template": "[%key:component::aprs::config::step::station::data_description::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data_description::symbol%]"
         },
         "description": "[%key:component::aprs::config::step::station::description%]",

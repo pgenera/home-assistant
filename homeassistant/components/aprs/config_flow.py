@@ -25,6 +25,7 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    TemplateSelector,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -43,6 +44,7 @@ from .const import (
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
     CONF_WEATHER,
@@ -127,6 +129,7 @@ STATION_SCHEMA = probatio.Schema(
         probatio.Required(CONF_POSITION_AMBIGUITY, default=0): NumberSelector(
             NumberSelectorConfig(min=0, max=4, step=1, mode=NumberSelectorMode.BOX)
         ),
+        probatio.Optional(CONF_SUPPRESS_TEMPLATE): TemplateSelector(),
         probatio.Required(CONF_WEATHER): section(
             probatio.Schema(
                 {

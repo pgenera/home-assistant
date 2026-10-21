@@ -9,6 +9,7 @@ CONF_CALLSIGN: Final = "callsign"
 CONF_COMMENT: Final = "comment"
 CONF_LOCATION_ENTITY: Final = "location_entity"
 CONF_POSITION_AMBIGUITY: Final = "position_ambiguity"
+CONF_SUPPRESS_TEMPLATE: Final = "suppress_template"
 CONF_SYMBOL: Final = "symbol"
 CONF_WEATHER: Final = "weather"
 
@@ -38,7 +39,16 @@ WEATHER_SYMBOL_CODE: Final = "_"
 # need far less.
 WEATHER_INTERVAL: Final = timedelta(minutes=10)
 POSITION_INTERVAL: Final = timedelta(minutes=30)
-MOVING_MIN_INTERVAL: Final = timedelta(minutes=2)
+
+# SmartBeaconing, with the usual tracker defaults: POSITION_INTERVAL at or
+# below SLOW_SPEED, FAST_RATE at or above FAST_SPEED, and a report after a
+# turn of more than MIN_TURN_ANGLE + TURN_SLOPE / speed degrees.
+SLOW_SPEED: Final = 5
+FAST_SPEED: Final = 60
+FAST_RATE: Final = timedelta(minutes=3)
+MIN_TURN_ANGLE: Final = 28
+TURN_SLOPE: Final = 255
+MIN_TURN_TIME: Final = timedelta(seconds=30)
 
 RECONNECT_DELAY: Final = 30
 

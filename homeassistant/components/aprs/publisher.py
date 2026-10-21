@@ -1,13 +1,14 @@
 """Publish position and weather reports to APRS-IS."""
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
 from aprslib import IS, ConnectionError as AprsConnectionError, LoginError
 
 from homeassistant.const import (
+    ATTR_GPS_ACCURACY,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
     ATTR_UNIT_OF_MEASUREMENT,
@@ -22,14 +23,17 @@ from homeassistant.core import (
     Event,
     EventStateChangedData,
     HomeAssistant,
+    State,
     callback,
     split_entity_id,
 )
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
 from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.template import Template, result_as_boolean
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
     BaseUnitConverter,
@@ -49,6 +53,7 @@ from .const import (
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
     CONF_WEATHER,
@@ -56,12 +61,13 @@ from .const import (
     CONF_WIND_GUST,
     CONF_WIND_SPEED,
     FILTER_PORT,
-    MOVING_MIN_INTERVAL,
+    MIN_TURN_TIME,
     POSITION_INTERVAL,
     WEATHER_INTERVAL,
     WEATHER_SYMBOL_CODE,
 )
-from .packet import WeatherData, build_report, format_position
+from .packet import WeatherData, build_report, format_course_speed, format_position
+from .smartbeacon import STOPPED, Fix, beacon_rate, motion, turned
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -117,7 +123,7 @@ class AprsIsClient:
 
 
 class AprsPublisher:
-    """Build reports from Home Assistant state and send them on a schedule."""
+    """Build reports from Home Assistant state and send them when due."""
 
     def __init__(
         self, hass: HomeAssistant, client: AprsIsClient, options: Mapping[str, Any]
@@ -135,8 +141,19 @@ class AprsPublisher:
             for key, entity_id in options.get(CONF_WEATHER, {}).items()
             if entity_id
         }
+        self._suppress = (
+            Template(template, hass)
+            if (template := options.get(CONF_SUPPRESS_TEMPLATE))
+            else None
+        )
+        self._moving = split_entity_id(self._location_entity)[0] != ZONE_DOMAIN
+        self._fix: Fix | None = None
+        self._motion = STOPPED
+        self._reported_fix: Fix | None = None
+        self._reported_course: float | None = None
         self._last_attempt: datetime | None = None
         self._failing = False
+        self._suppress_failing = False
         self._listeners: list[CALLBACK_TYPE] = []
 
     @property
@@ -144,25 +161,33 @@ class AprsPublisher:
         """Return whether reports carry weather data."""
         return self._symbol[1] == WEATHER_SYMBOL_CODE
 
+    @property
+    def _slow_rate(self) -> timedelta:
+        return WEATHER_INTERVAL if self.sends_weather else POSITION_INTERVAL
+
     @callback
     def async_start(self) -> CALLBACK_TYPE:
         """Start sending reports; returns a callback that stops it."""
-        unsubscribers = [
-            async_track_time_interval(
-                self.hass,
-                self._async_send_scheduled,
-                WEATHER_INTERVAL if self.sends_weather else POSITION_INTERVAL,
-                name="APRS-IS report",
-                cancel_on_shutdown=True,
-            ),
-            async_at_started(self.hass, self._async_send_scheduled),
-        ]
-        if split_entity_id(self._location_entity)[0] != ZONE_DOMAIN:
+        unsubscribers = [async_at_started(self.hass, self._async_send_scheduled)]
+        if self._moving:
+            if (state := self.hass.states.get(self._location_entity)) is not None:
+                self._fix = _fix_from_state(state)
             unsubscribers.append(
                 async_track_state_change_event(
                     self.hass, self._location_entity, self._async_location_changed
                 )
             )
+        # A moving station checks often, so a report that is not due yet
+        # goes out with the latest position as soon as it is.
+        unsubscribers.append(
+            async_track_time_interval(
+                self.hass,
+                self._async_evaluate if self._moving else self._async_send_scheduled,
+                MIN_TURN_TIME if self._moving else self._slow_rate,
+                name="APRS-IS report",
+                cancel_on_shutdown=True,
+            )
+        )
 
         @callback
         def stop() -> None:
@@ -188,22 +213,55 @@ class AprsPublisher:
     async def _async_location_changed(
         self, event: Event[EventStateChangedData]
     ) -> None:
-        old_state = event.data["old_state"]
-        new_state = event.data["new_state"]
-        if new_state is None or (
-            old_state is not None
-            and old_state.attributes.get(ATTR_LATITUDE)
-            == new_state.attributes.get(ATTR_LATITUDE)
-            and old_state.attributes.get(ATTR_LONGITUDE)
-            == new_state.attributes.get(ATTR_LONGITUDE)
-        ):
+        if (new_state := event.data["new_state"]) is None or (
+            fix := _fix_from_state(new_state)
+        ) is None:
             return
-        if (
-            self._last_attempt is not None
-            and dt_util.utcnow() - self._last_attempt < MOVING_MIN_INTERVAL
-        ):
-            return
+        if self._fix is not None:
+            if (fix.latitude, fix.longitude) == (
+                self._fix.latitude,
+                self._fix.longitude,
+            ):
+                return
+            self._motion = motion(self._fix, fix)
+        self._fix = fix
+        await self._async_evaluate()
+
+    async def _async_evaluate(self, *_: Any) -> None:
+        """Send a report if SmartBeaconing says one is due."""
+        if self._last_attempt is not None:
+            elapsed = dt_util.utcnow() - self._last_attempt
+            if self._fix == self._reported_fix:
+                due = elapsed >= self._slow_rate
+            else:
+                due = elapsed >= min(
+                    beacon_rate(self._motion.speed), self._slow_rate
+                ) or (
+                    turned(self._reported_course, self._motion)
+                    and elapsed >= MIN_TURN_TIME
+                )
+            if not due:
+                return
         await self.async_send_report()
+
+    def _suppressed(self) -> bool:
+        if self._suppress is None:
+            return False
+        try:
+            result = self._suppress.async_render(parse_result=False)
+        except TemplateError as err:
+            # Not knowing whether to hide the position, keep it hidden.
+            if not self._suppress_failing:
+                _LOGGER.warning(
+                    "Not sending APRS-IS reports for %s, the suppress template "
+                    "failed: %s",
+                    self.client.callsign,
+                    err,
+                )
+            self._suppress_failing = True
+            return True
+        self._suppress_failing = False
+        return result_as_boolean(result)
 
     def _read_weather(self, key: str) -> float | None:
         if (entity_id := self._weather_entities.get(key)) is None or (
@@ -241,12 +299,35 @@ class AprsPublisher:
             if self.sends_weather
             else None
         )
-        return build_report(self.client.callsign, now, position, weather, self._comment)
+        course_speed = (
+            ""
+            if self._motion.course is None
+            else format_course_speed(
+                self._motion.course,
+                SpeedConverter.convert(
+                    self._motion.speed,
+                    UnitOfSpeed.MILES_PER_HOUR,
+                    UnitOfSpeed.KNOTS,
+                ),
+            )
+        )
+        return build_report(
+            self.client.callsign, now, position, weather, self._comment, course_speed
+        )
 
     async def async_send_report(self) -> None:
-        """Send a report now."""
+        """Send a report now, unless the suppress template says not to."""
+        if self._suppressed():
+            _LOGGER.debug("Suppressed APRS-IS report for %s", self.client.callsign)
+            return
         now = dt_util.utcnow()
         self._last_attempt = now
+        if self._fix == self._reported_fix:
+            # Not having moved since the last report means stopped, whatever
+            # speed was last worked out.
+            self._motion = STOPPED
+        self._reported_fix = self._fix
+        self._reported_course = self._motion.course
         if (packet := self.build_report(now)) is None:
             self._set_failing(f"{self._location_entity} has no location")
             return
@@ -271,3 +352,14 @@ class AprsPublisher:
                 reason,
             )
         self._failing = True
+
+
+def _fix_from_state(state: State) -> Fix | None:
+    if ATTR_LATITUDE not in state.attributes or ATTR_LONGITUDE not in state.attributes:
+        return None
+    return Fix(
+        latitude=state.attributes[ATTR_LATITUDE],
+        longitude=state.attributes[ATTR_LONGITUDE],
+        time=state.last_updated,
+        accuracy=state.attributes.get(ATTR_GPS_ACCURACY) or 0,
+    )

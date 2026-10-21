@@ -1,10 +1,4 @@
 # serializer version: 1
-# name: test_moving_location[options0]
-  list([
-    'N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>',
-    'N0CALL-13>APZHAS,TCPIP*:/210907z4242.00N/07106.00W>',
-  ])
-# ---
 # name: test_report_interval[position]
   list([
     'N0CALL-13>APZHAS,TCPIP*:/210905z4234.  N/07052.  W-QTH',
@@ -15,6 +9,15 @@
   list([
     'N0CALL-13>APZHAS,TCPIP*:/210905z4233.78N/07052.15W_.../...g...t...',
     'N0CALL-13>APZHAS,TCPIP*:/210915z4233.78N/07052.15W_.../...g...t...',
+  ])
+# ---
+# name: test_smart_beaconing[options0]
+  list([
+    'N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>',
+    'N0CALL-13>APZHAS,TCPIP*:/210908z4230.87N/07100.00W>360/052',
+    'N0CALL-13>APZHAS,TCPIP*:/210909z4230.87N/07058.82W>090/017',
+    'N0CALL-13>APZHAS,TCPIP*:/210909z4230.72N/07058.82W>180/052',
+    'N0CALL-13>APZHAS,TCPIP*:/210939z4230.72N/07058.82W>',
   ])
 # ---
 # name: test_weather_report

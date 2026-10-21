@@ -13,6 +13,7 @@ from homeassistant.components.aprs.const import (
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
     DOMAIN,
@@ -42,6 +43,7 @@ POSITION_OPTIONS = {
     CONF_SYMBOL: "/>",
     CONF_COMMENT: "On the road",
     CONF_POSITION_AMBIGUITY: 1,
+    CONF_SUPPRESS_TEMPLATE: "{{ distance('device_tracker.car', 'zone.home') < 1 }}",
     CONF_WEATHER: {},
 }
 RECEIVER_INPUT = {

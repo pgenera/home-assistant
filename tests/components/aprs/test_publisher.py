@@ -14,6 +14,7 @@ from homeassistant.components.aprs.const import (
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
 )
@@ -158,36 +159,131 @@ async def test_report_interval(
     assert _sent(mock_publisher_is) == snapshot
 
 
+# One mile, north and east of the starting point.
+MILE_NORTH = 1609.344 / 111_050
+MILE_EAST = 1609.344 / 81_890
+
+
+def _move(hass: HomeAssistant, latitude: float, longitude: float, **extra: Any) -> None:
+    hass.states.async_set(
+        CAR, "not_home", {ATTR_LATITUDE: latitude, ATTR_LONGITUDE: longitude, **extra}
+    )
+
+
 @pytest.mark.parametrize("options", [MOVING_OPTIONS])
-async def test_moving_location(
+async def test_smart_beaconing(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
     mock_config_entry: MockConfigEntry,
     mock_publisher_is: MagicMock,
     snapshot: SnapshotAssertion,
 ) -> None:
-    """Test a moving entity is reported when it moves, at a limited rate."""
-    hass.states.async_set(CAR, "not_home", {ATTR_LATITUDE: 42.5, ATTR_LONGITUDE: -71})
+    """Test a moving station reports by speed and turns, queuing early updates."""
+    _move(hass, 42.5, -71.0)
     await _async_setup(hass, mock_config_entry)
     assert len(_sent(mock_publisher_is)) == 1
 
-    hass.states.async_set(CAR, "not_home", {ATTR_LATITUDE: 42.6, ATTR_LONGITUDE: -71})
+    # 60 mph north: due 3 minutes after the last report, so this waits.
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
     await hass.async_block_till_done()
     assert len(_sent(mock_publisher_is)) == 1
 
-    await _async_tick(hass, freezer, timedelta(minutes=2))
-    hass.states.async_set(CAR, "work", {ATTR_LATITUDE: 42.6, ATTR_LONGITUDE: -71})
-    await hass.async_block_till_done()
-    assert len(_sent(mock_publisher_is)) == 1
-
-    hass.states.async_set(CAR, "work", {ATTR_LATITUDE: 42.7, ATTR_LONGITUDE: -71.1})
-    await hass.async_block_till_done()
+    await _async_tick(hass, freezer, timedelta(seconds=121))
     assert len(_sent(mock_publisher_is)) == 2
 
-    await _async_tick(hass, freezer, timedelta(minutes=2))
-    hass.states.async_remove(CAR)
+    # Turning east is reported straight away; that mile took 3 minutes.
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0 + MILE_EAST)
     await hass.async_block_till_done()
+    assert len(_sent(mock_publisher_is)) == 3
+
+    # Another turn within 30 seconds waits for the minimum turn time, and
+    # goes out at the next check after it.
+    freezer.tick(timedelta(seconds=10))
+    _move(hass, 42.5 + MILE_NORTH - MILE_NORTH / 6, -71.0 + MILE_EAST)
+    await hass.async_block_till_done()
+    assert len(_sent(mock_publisher_is)) == 3
+
+    await _async_tick(hass, freezer, timedelta(seconds=31))
+    assert len(_sent(mock_publisher_is)) == 4
+
+    # Without new positions it falls back to the stopped rate.
+    await _async_tick(hass, freezer, timedelta(minutes=29))
+    assert len(_sent(mock_publisher_is)) == 4
+
+    await _async_tick(hass, freezer, timedelta(minutes=1, seconds=1))
     assert _sent(mock_publisher_is) == snapshot
+
+
+@pytest.mark.parametrize("options", [MOVING_OPTIONS])
+async def test_moving_location_ignored_updates(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+) -> None:
+    """Test updates that are not movement do not cause reports."""
+    _move(hass, 42.5, -71.0, gps_accuracy=50)
+    await _async_setup(hass, mock_config_entry)
+
+    freezer.tick(timedelta(minutes=5))
+    _move(hass, 42.5001, -71.0, gps_accuracy=50)
+    hass.states.async_set(CAR, "work", {ATTR_LATITUDE: 42.5001, ATTR_LONGITUDE: -71})
+    hass.states.async_set(CAR, "unavailable")
+    hass.states.async_remove(CAR)
+    await _async_tick(hass, freezer, timedelta(minutes=1))
+
+    assert len(_sent(mock_publisher_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            **MOVING_OPTIONS,
+            CONF_SUPPRESS_TEMPLATE: "{{ is_state('input_boolean.hide', 'on') }}",
+        }
+    ],
+)
+async def test_suppress_template(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+) -> None:
+    """Test nothing is sent while the suppress template renders true."""
+    hass.states.async_set("input_boolean.hide", "on")
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_config_entry)
+
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    await _async_tick(hass, freezer, timedelta(minutes=31))
+    assert _sent(mock_publisher_is) == []
+
+    hass.states.async_set("input_boolean.hide", "off")
+    await _async_tick(hass, freezer, timedelta(seconds=30))
+    assert len(_sent(mock_publisher_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options", [{**MOVING_OPTIONS, CONF_SUPPRESS_TEMPLATE: "{{ 1 / 0 }}"}]
+)
+async def test_suppress_template_error(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_config_entry: MockConfigEntry,
+    mock_publisher_is: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test a failing suppress template keeps the position hidden."""
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_config_entry)
+    await _async_tick(hass, freezer, timedelta(minutes=31))
+
+    assert _sent(mock_publisher_is) == []
+    assert caplog.text.count("the suppress template failed") == 1
 
 
 async def test_no_location(
