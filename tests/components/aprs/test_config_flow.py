@@ -13,6 +13,7 @@ from homeassistant.components.aprs.const import (
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
     DOMAIN,
@@ -42,6 +43,7 @@ POSITION_OPTIONS = {
     CONF_SYMBOL: "/>",
     CONF_COMMENT: "On the road",
     CONF_POSITION_AMBIGUITY: 1,
+    CONF_SUPPRESS_TEMPLATE: "{{ distance('device_tracker.car', 'zone.home') < 1 }}",
     CONF_WEATHER: {},
 }
 RECEIVER_INPUT = {
@@ -510,13 +512,19 @@ async def test_options_flow_station(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {CONF_SYMBOL: "weather_symbol_required"}
 
+    # The suppress template is optional, so leaving it out clears it.
+    options = {
+        key: value
+        for key, value in POSITION_OPTIONS.items()
+        if key != CONF_SUPPRESS_TEMPLATE
+    }
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], POSITION_OPTIONS
+        result["flow_id"], options
     )
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert mock_station_entry.options == POSITION_OPTIONS
+    assert mock_station_entry.options == options
     assert len(mock_setup_entry.mock_calls) == 2
 
 

@@ -14,6 +14,7 @@ from homeassistant.components.aprs.const import (
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
     DOMAIN,
@@ -308,6 +309,55 @@ async def test_moving_location_ignored_updates(
     assert len(_sent(mock_client_is)) == 1
 
 
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            **MOVING_OPTIONS,
+            CONF_SUPPRESS_TEMPLATE: "{{ is_state('input_boolean.hide', 'on') }}",
+        }
+    ],
+)
+async def test_suppress_template(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test nothing is sent while the suppress template renders true."""
+    hass.states.async_set("input_boolean.hide", "on")
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_station_entry)
+
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    await _async_tick(hass, freezer, timedelta(minutes=31))
+    assert _sent(mock_client_is) == []
+
+    hass.states.async_set("input_boolean.hide", "off")
+    await _async_tick(hass, freezer, timedelta(seconds=30))
+    assert len(_sent(mock_client_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options", [{**MOVING_OPTIONS, CONF_SUPPRESS_TEMPLATE: "{{ 1 / 0 }}"}]
+)
+async def test_suppress_template_error(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test a failing suppress template keeps the position hidden."""
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_station_entry)
+    await _async_tick(hass, freezer, timedelta(minutes=31))
+
+    assert _sent(mock_client_is) == []
+    assert caplog.text.count("the suppress template failed") == 1
+
+
 async def test_no_location(
     hass: HomeAssistant,
     freezer: FrozenDateTimeFactory,
@@ -490,4 +540,61 @@ async def test_waits_for_start(
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await hass.async_block_till_done()
 
+    assert len(_sent(mock_client_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            **POSITION_OPTIONS,
+            CONF_SUPPRESS_TEMPLATE: "{{ is_state('input_boolean.hide', 'on') }}",
+        }
+    ],
+)
+async def test_suppress_template_fixed_station(
+    hass: HomeAssistant,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test a fixed station reports as soon as the template renders false."""
+    hass.states.async_set("zone.home", "0", HOME)
+    hass.states.async_set("input_boolean.hide", "on")
+    await _async_setup(hass, mock_station_entry)
+    assert _sent(mock_client_is) == []
+
+    hass.states.async_set("input_boolean.hide", "off")
+    await hass.async_block_till_done()
+
+    assert len(_sent(mock_client_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            **POSITION_OPTIONS,
+            CONF_SUPPRESS_TEMPLATE: "{{ states('input_number.x') | float > 1 }}",
+        }
+    ],
+)
+async def test_suppress_template_recovers(
+    hass: HomeAssistant,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test reports resume once a failing template renders false."""
+    hass.states.async_set("zone.home", "0", HOME)
+    hass.states.async_set("input_number.x", "5")
+    await _async_setup(hass, mock_station_entry)
+    hass.states.async_set("input_number.x", "not a number")
+    await hass.async_block_till_done()
+    assert _sent(mock_client_is) == []
+    assert "the suppress template failed" in caplog.text
+
+    hass.states.async_set("input_number.x", "0")
+    await hass.async_block_till_done()
+
+    assert "The suppress template for N0CALL-13 renders again" in caplog.text
     assert len(_sent(mock_client_is)) == 1

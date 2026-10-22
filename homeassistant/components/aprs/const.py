@@ -11,6 +11,7 @@ CONF_COMMENT: Final = "comment"
 CONF_ENTRY_TYPE: Final = "entry_type"
 CONF_LOCATION_ENTITY: Final = "location_entity"
 CONF_POSITION_AMBIGUITY: Final = "position_ambiguity"
+CONF_SUPPRESS_TEMPLATE: Final = "suppress_template"
 CONF_SYMBOL: Final = "symbol"
 CONF_WEATHER: Final = "weather"
 
