@@ -8,6 +8,7 @@ import pytest
 from homeassistant.components.aprs.packet import (
     WeatherData,
     build_report,
+    format_course_speed,
     format_position,
     format_weather,
 )
@@ -139,3 +140,34 @@ def test_build_report_position_only() -> None:
     parsed = aprslib.parse(packet)
     assert parsed["latitude"] == pytest.approx(42.563, abs=1e-3)
     assert parsed["longitude"] == pytest.approx(-70.86917, abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("course", "speed", "expected"),
+    [
+        pytest.param(88.4, 36.2, "088/036", id="example"),
+        pytest.param(0.2, 0, "360/000", id="north"),
+        pytest.param(359.6, 1200, "360/999", id="clamped"),
+    ],
+)
+def test_format_course_speed(course: float, speed: float, expected: str) -> None:
+    """Test the CSE/SPD extension, with north as 360 since 000 is unknown."""
+    assert format_course_speed(course, speed) == expected
+
+
+def test_build_report_course_speed() -> None:
+    """Test a moving station's report decodes with its course and speed."""
+    packet = build_report(
+        "N0CALL-9",
+        datetime(2026, 10, 21, 17, 5, tzinfo=UTC),
+        format_position(42.362, -71.0867, "/>"),
+        None,
+        "Mobile",
+        format_course_speed(88, 36),
+    )
+
+    assert packet == "N0CALL-9>APZHAS,TCPIP*:/211705z4221.72N/07105.20W>088/036Mobile"
+    parsed = aprslib.parse(packet)
+    assert parsed["course"] == 88
+    assert parsed["speed"] == pytest.approx(36 * 1.852)
+    assert parsed["comment"] == "Mobile"

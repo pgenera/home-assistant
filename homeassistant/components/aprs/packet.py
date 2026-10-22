@@ -128,20 +128,27 @@ def format_weather(weather: WeatherData) -> str:
     return "".join(parts)
 
 
+def format_course_speed(course: float, speed: float) -> str:
+    """Format the CSE/SPD extension for a course in degrees and speed in knots."""
+    # Course 000 means unknown, so north is sent as 360.
+    return f"{(_clamp(course, 0, 360) or 360):03d}/{_clamp(speed, 0, 999):03d}"
+
+
 def build_report(
     callsign: str,
     timestamp: datetime,
     position: str,
     weather: WeatherData | None,
     comment: str,
+    course_speed: str = "",
 ) -> str:
     """Build a timestamped position report, with weather data if given.
 
-    The / data type marks a station without APRS messaging.
+    The / data type marks a station without APRS messaging. course_speed is
+    only used without weather data, where that extension carries the wind.
     """
     body = f"/{timestamp:%d%H%M}z{position}"
-    if weather is not None:
-        body += format_weather(weather)
+    body += course_speed if weather is None else format_weather(weather)
     # A line break would end the packet and start another under our login.
     comment = _INVALID_COMMENT_CHARS.sub("", comment)
     return f"{callsign}>{TOCALL},TCPIP*:{body}{comment}"
