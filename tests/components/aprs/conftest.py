@@ -10,21 +10,68 @@ from aprslib import ConnectionError as AprsConnectionError
 import pytest
 from pytest_homeassistant.common import MockConfigEntry
 
-from homeassistant.components.aprs.const import CONF_CALLSIGN, CONF_CALLSIGNS, DOMAIN
+from homeassistant.components.aprs.const import (
+    CONF_CALLSIGN,
+    CONF_CALLSIGNS,
+    CONF_ENTRY_TYPE,
+    CONF_HUMIDITY,
+    CONF_LOCATION_ENTITY,
+    CONF_LUMINOSITY,
+    CONF_POSITION_AMBIGUITY,
+    CONF_PRESSURE,
+    CONF_RAIN_1H,
+    CONF_RAIN_24H,
+    CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_SYMBOL,
+    CONF_TEMPERATURE,
+    CONF_WEATHER,
+    CONF_WIND_DIRECTION,
+    CONF_WIND_GUST,
+    CONF_WIND_SPEED,
+    DOMAIN,
+    ENTRY_TYPE_RECEIVER,
+    ENTRY_TYPE_STATION,
+)
 from homeassistant.const import CONF_HOST, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
+TEST_STATION = "N0CALL-13"
 TEST_PASSCODE = str(aprslib.passcode("N0CALL"))
 TEST_SERVER = "aprs.example.com"
 
 TEST_RECEIVER = "N0CALL"
 
+STATION_LOGIN = {
+    CONF_CALLSIGN: TEST_STATION,
+    CONF_PASSWORD: TEST_PASSCODE,
+    CONF_HOST: TEST_SERVER,
+}
+STATION_DATA = {CONF_ENTRY_TYPE: ENTRY_TYPE_STATION, **STATION_LOGIN}
 RECEIVER_DATA = {
+    CONF_ENTRY_TYPE: ENTRY_TYPE_RECEIVER,
     CONF_CALLSIGN: TEST_RECEIVER,
     CONF_PASSWORD: "-1",
     CONF_HOST: TEST_SERVER,
 }
 RECEIVER_OPTIONS = {CONF_CALLSIGNS: ["XX0FOO*", "YY0BAR-1"]}
+WEATHER_ENTITIES = {
+    CONF_TEMPERATURE: "sensor.temperature",
+    CONF_HUMIDITY: "sensor.humidity",
+    CONF_PRESSURE: "sensor.pressure",
+    CONF_WIND_DIRECTION: "sensor.wind_direction",
+    CONF_WIND_SPEED: "sensor.wind_speed",
+    CONF_WIND_GUST: "sensor.wind_gust",
+    CONF_RAIN_1H: "sensor.rain_1h",
+    CONF_RAIN_24H: "sensor.rain_24h",
+    CONF_RAIN_SINCE_MIDNIGHT: "sensor.rain_today",
+    CONF_LUMINOSITY: "sensor.irradiance",
+}
+WEATHER_OPTIONS = {
+    CONF_LOCATION_ENTITY: "zone.home",
+    CONF_SYMBOL: "/_",
+    CONF_POSITION_AMBIGUITY: 0,
+    CONF_WEATHER: WEATHER_ENTITIES,
+}
 
 
 class MockAprsIs:
@@ -104,8 +151,27 @@ def mock_unload_entry() -> Generator[AsyncMock]:
 
 
 @pytest.fixture
+def options() -> dict[str, Any]:
+    """Return the station options."""
+    return WEATHER_OPTIONS
+
+
+@pytest.fixture
+def mock_station_entry(options: dict[str, Any]) -> MockConfigEntry:
+    """Return a station config entry."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title=TEST_STATION,
+        unique_id=TEST_STATION,
+        data=STATION_DATA,
+        options=options,
+        minor_version=2,
+    )
+
+
+@pytest.fixture
 def mock_client_is() -> Generator[MagicMock]:
-    """Mock the APRS-IS connections used to check logins."""
+    """Mock the short-lived APRS-IS connections used to log in and send."""
     with patch("homeassistant.components.aprs.client.IS", autospec=True) as mock_is:
         yield mock_is.return_value
 
@@ -119,6 +185,7 @@ def mock_config_entry() -> MockConfigEntry:
         unique_id=TEST_RECEIVER,
         data=RECEIVER_DATA,
         options=RECEIVER_OPTIONS,
+        minor_version=2,
     )
 
 

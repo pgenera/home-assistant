@@ -5,7 +5,9 @@ rules:
     comment: This integration does not provide actions.
   appropriate-polling:
     status: exempt
-    comment: Positions are pushed by the APRS-IS server.
+    comment: |
+      Receivers are pushed positions by the APRS-IS server. Stations send
+      reports at the intervals APRS-IS asks for and poll nothing.
   brands: done
   common-modules: done
   config-flow-test-coverage: done
@@ -67,15 +69,13 @@ rules:
   docs-use-cases: done
   dynamic-devices: done
   entity-category: done
-  entity-device-class:
-    status: exempt
-    comment: Device trackers have no device classes.
+  entity-device-class: done
   entity-disabled-by-default:
     status: exempt
-    comment: Every tracker is for a station the user asked to track.
-  entity-translations:
-    status: exempt
-    comment: Trackers are named after their station's device.
+    comment: |
+      Every tracker is for a station the user asked to track, and a station's
+      only entity is its last report.
+  entity-translations: done
   exception-translations: done
   icon-translations:
     status: exempt

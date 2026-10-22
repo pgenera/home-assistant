@@ -6,7 +6,7 @@ from .const import FILTER_PORT
 
 
 class AprsIsClient:
-    """Log in to APRS-IS without keeping the connection open."""
+    """Log in to APRS-IS, or send a packet, without staying connected."""
 
     def __init__(self, callsign: str, passcode: str, host: str) -> None:
         """Initialize the client."""
@@ -24,6 +24,18 @@ class AprsIsClient:
     def check_login(self) -> None:
         """Log in and disconnect, raising if the server refuses us."""
         self._connect().close()
+
+    def send(self, packet: str) -> None:
+        """Send one packet.
+
+        A connection per report means we never hold a socket whose server
+        keepalives nobody reads.
+        """
+        ais = self._connect()
+        try:
+            ais.sendall(packet)
+        finally:
+            ais.close()
 
 
 def connect(ais: IS) -> None:

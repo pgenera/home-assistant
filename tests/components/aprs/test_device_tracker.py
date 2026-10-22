@@ -15,7 +15,13 @@ from pytest_homeassistant.common import (
 from pytest_homeassistant.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
-from homeassistant.components.aprs.const import CONF_CALLSIGN, CONF_CALLSIGNS, DOMAIN
+from homeassistant.components.aprs.const import (
+    CONF_CALLSIGN,
+    CONF_CALLSIGNS,
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_TYPE_RECEIVER,
+)
 from homeassistant.components.aprs.receiver import gps_accuracy, make_filter
 from homeassistant.components.device_tracker import DOMAIN as DEVICE_TRACKER_DOMAIN
 from homeassistant.const import (
@@ -37,7 +43,13 @@ from homeassistant.helpers import (
 )
 from homeassistant.setup import async_setup_component
 
-from .conftest import TEST_PASSCODE, TEST_RECEIVER, TEST_SERVER, MockAprsIs
+from .conftest import (
+    TEST_PASSCODE,
+    TEST_RECEIVER,
+    TEST_SERVER,
+    TEST_STATION,
+    MockAprsIs,
+)
 
 TEST_COORDS_NULL_ISLAND = (0, 0)
 TRACKER = "device_tracker.xx0foo_1"
@@ -356,6 +368,7 @@ async def test_yaml_import(
     assert len(entries) == 1
     assert entries[0].unique_id == TEST_RECEIVER
     assert entries[0].data == {
+        CONF_ENTRY_TYPE: ENTRY_TYPE_RECEIVER,
         CONF_CALLSIGN: TEST_RECEIVER,
         CONF_PASSWORD: TEST_PASSCODE,
         CONF_HOST: TEST_SERVER,
@@ -703,3 +716,48 @@ async def test_restore_unreadable_extra_data(
     await _async_setup(hass, mock_config_entry)
 
     assert hass.states.get(TRACKER).attributes[ATTR_LATITUDE] == 49.0583
+
+
+@pytest.mark.usefixtures("mock_client_is")
+async def test_own_station_not_tracked(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_station_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test a callsign this Home Assistant publishes as is not tracked."""
+    mock_station_entry.add_to_hass(hass)
+    await _async_setup(hass, mock_config_entry)
+
+    await mock_aprs_is.async_receive(
+        hass, f"{TEST_STATION}>APRS,TCPIP*:!4903.50N/07201.75W>"
+    )
+    await mock_aprs_is.async_receive(hass, POSITION)
+
+    assert hass.states.async_entity_ids(DEVICE_TRACKER_DOMAIN) == [TRACKER]
+
+
+@pytest.mark.usefixtures("mock_client_is")
+async def test_own_station_tracker_removed(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
+    mock_station_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test a tracker made before its callsign was published is removed."""
+    mock_station_entry.add_to_hass(hass)
+    mock_config_entry.add_to_hass(hass)
+    for name, object_id in ((TEST_STATION, "n0call_13"), ("XX0FOO-1", "xx0foo_1")):
+        entity_registry.async_get_or_create(
+            DEVICE_TRACKER_DOMAIN,
+            DOMAIN,
+            f"{TEST_RECEIVER}_{name}",
+            config_entry=mock_config_entry,
+            suggested_object_id=object_id,
+        )
+
+    await _async_setup(hass, mock_config_entry)
+
+    assert entity_registry.async_get("device_tracker.n0call_13") is None
+    assert entity_registry.async_get(TRACKER) is not None

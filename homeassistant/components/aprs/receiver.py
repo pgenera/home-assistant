@@ -16,7 +16,14 @@ from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 
 from .client import connect
-from .const import FILTER_PORT, RECONNECT_DELAY, WEATHER_SYMBOL_CODE
+from .const import (
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_TYPE_STATION,
+    FILTER_PORT,
+    RECONNECT_DELAY,
+    WEATHER_SYMBOL_CODE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +51,18 @@ class AprsStation:
     longitude: float
     gps_accuracy: int = 0
     attributes: dict[str, Any] = field(default_factory=dict)
+
+
+def published_callsigns(hass: HomeAssistant) -> set[str]:
+    """Return the callsigns this Home Assistant publishes as.
+
+    They are not tracked: they are our own reports coming back.
+    """
+    return {
+        entry.unique_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.data[CONF_ENTRY_TYPE] == ENTRY_TYPE_STATION and entry.unique_id
+    }
 
 
 def make_filter(callsigns: list[str]) -> str:
@@ -244,6 +263,8 @@ class AprsReceiver:
 
     @callback
     def _async_dispatch(self, station: AprsStation) -> None:
+        if station.name.upper() in published_callsigns(self.hass):
+            return
         for name in (None, station.name):
             for update_callback in list(self._listeners.get(name, ())):
                 update_callback(station)

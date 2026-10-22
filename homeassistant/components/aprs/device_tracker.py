@@ -47,7 +47,7 @@ from .const import (
     DOMAIN,
     RECEIVE_ONLY_PASSCODE,
 )
-from .receiver import EXTRA_ATTRIBUTES, AprsReceiver, AprsStation
+from .receiver import EXTRA_ATTRIBUTES, AprsReceiver, AprsStation, published_callsigns
 
 PARALLEL_UPDATES = 0
 
@@ -125,6 +125,7 @@ async def async_setup_entry(
 ) -> None:
     """Track the stations a receiver hears."""
     receiver = entry.runtime_data
+    assert isinstance(receiver, AprsReceiver)
     assert entry.unique_id
     unique_id = entry.unique_id
     prefix = f"{unique_id}_"
@@ -144,12 +145,15 @@ async def async_setup_entry(
         entity.async_on_remove(_async_forget)
         async_add_entities([entity])
 
+    published = published_callsigns(hass)
     for registry_entry in er.async_entries_for_config_entry(
         entity_registry, entry.entry_id
     ):
-        if not registry_entry.disabled and (
-            name := registry_entry.unique_id.removeprefix(prefix)
-        ):
+        name = registry_entry.unique_id.removeprefix(prefix)
+        if name.upper() in published:
+            # Trackers made before a station with this callsign was added.
+            entity_registry.async_remove(registry_entry.entity_id)
+        elif not registry_entry.disabled:
             _async_add(name)
 
     @callback
