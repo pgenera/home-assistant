@@ -16,7 +16,7 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback, split_entity_id
 from homeassistant.data_entry_flow import AbortFlow, section
 from homeassistant.helpers.selector import (
     EntitySelector,
@@ -58,6 +58,7 @@ from .const import (
     ENTRY_TYPE_STATION,
     RECEIVE_ONLY_PASSCODE,
     WEATHER_SYMBOL_CODE,
+    ZONE_DOMAIN,
 )
 from .packet import (
     COMMENT_MAX_LENGTH,
@@ -205,9 +206,13 @@ def validate_station(user_input: dict[str, Any]) -> dict[str, str]:
         sends_weather and WEATHER_FIELD_LIKE_RE.match(comment)
     ):
         return {CONF_COMMENT: "invalid_comment"}
-    # Weather data comes first.
+    # Weather data or a moving station's course and speed come first.
+    has_extension = (
+        sends_weather
+        or split_entity_id(user_input[CONF_LOCATION_ENTITY])[0] != ZONE_DOMAIN
+    )
     if len(comment) > (
-        COMMENT_MAX_LENGTH_AFTER_EXTENSION if sends_weather else COMMENT_MAX_LENGTH
+        COMMENT_MAX_LENGTH_AFTER_EXTENSION if has_extension else COMMENT_MAX_LENGTH
     ):
         return {CONF_COMMENT: "comment_too_long"}
     user_input[CONF_POSITION_AMBIGUITY] = int(user_input[CONF_POSITION_AMBIGUITY])
