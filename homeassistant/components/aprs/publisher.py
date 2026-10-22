@@ -28,11 +28,16 @@ from homeassistant.core import (
     callback,
     split_entity_id,
 )
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers.event import (
+    TrackTemplate,
+    TrackTemplateResult,
     async_track_state_change_event,
+    async_track_template_result,
     async_track_time_interval,
 )
 from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.template import Template, result_as_boolean
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import (
     BaseUnitConverter,
@@ -53,6 +58,7 @@ from .const import (
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
     CONF_WEATHER,
@@ -112,6 +118,11 @@ class AprsPublisher:
             for key, entity_id in options.get(CONF_WEATHER, {}).items()
             if entity_id
         }
+        self._suppress = (
+            Template(template, hass)
+            if (template := options.get(CONF_SUPPRESS_TEMPLATE))
+            else None
+        )
         self._moving = split_entity_id(self._location_entity)[0] != ZONE_DOMAIN
         self._fix: Fix | None = None
         self._motion = STOPPED
@@ -120,6 +131,8 @@ class AprsPublisher:
         self._stop_unreported = False
         self._last_attempt: datetime | None = None
         self._failing = False
+        self._suppress_failing = False
+        self._suppressed = False
         self._listeners: list[CALLBACK_TYPE] = []
 
     @property
@@ -134,7 +147,16 @@ class AprsPublisher:
     @callback
     def async_start(self) -> CALLBACK_TYPE:
         """Start sending reports; returns a callback that stops it."""
-        unsubscribers = [async_at_started(self.hass, self._async_send_scheduled)]
+        unsubscribers: list[CALLBACK_TYPE] = []
+        if self._suppress is not None:
+            info = async_track_template_result(
+                self.hass,
+                [TrackTemplate(self._suppress, None)],
+                self._async_suppress_changed,
+            )
+            info.async_refresh()
+            unsubscribers.append(info.async_remove)
+        unsubscribers.append(async_at_started(self.hass, self._async_send_scheduled))
         if self._moving:
             if (state := self.hass.states.get(self._location_entity)) is not None:
                 self._fix = _fix_from_state(state)
@@ -232,6 +254,52 @@ class AprsPublisher:
                 return
         await self.async_send_report()
 
+    def _suppressed_now(self) -> bool:
+        # Rendered again, since the entities it uses may have changed after
+        # the location but before the tracked result caught up.
+        if self._suppress is None:
+            return False
+        try:
+            return result_as_boolean(self._suppress.async_render(parse_result=False))
+        except TemplateError:
+            # Not knowing whether to hide the position, keep it hidden.
+            return True
+
+    @callback
+    def _async_suppress_changed(
+        self,
+        event: Event[EventStateChangedData] | None,
+        updates: list[TrackTemplateResult],
+    ) -> None:
+        was_suppressed = self._suppressed
+        result = updates.pop().result
+        if isinstance(result, TemplateError):
+            _LOGGER.warning(
+                "Not sending APRS-IS reports for %s, the suppress template failed: %s",
+                self.client.callsign,
+                result,
+            )
+            self._suppress_failing = self._suppressed = True
+        else:
+            if self._suppress_failing:
+                _LOGGER.info(
+                    "The suppress template for %s renders again", self.client.callsign
+                )
+                self._suppress_failing = False
+            self._suppressed = result_as_boolean(result)
+        if self._suppressed == was_suppressed:
+            return
+        _LOGGER.debug(
+            "%s APRS-IS reports for %s",
+            "Suppressing" if self._suppressed else "Resuming",
+            self.client.callsign,
+        )
+        if not self._suppressed:
+            # Report now rather than at the next interval.
+            self.hass.async_create_task(
+                self._async_evaluate() if self._moving else self.async_send_report()
+            )
+
     def _read_weather(self, key: str) -> float | None:
         if (entity_id := self._weather_entities.get(key)) is None or (
             state := self.hass.states.get(entity_id)
@@ -287,7 +355,9 @@ class AprsPublisher:
         )
 
     async def async_send_report(self) -> None:
-        """Send a report now."""
+        """Send a report now, unless the suppress template says not to."""
+        if self._suppressed_now():
+            return
         now = dt_util.utcnow()
         if self._fix == self._reported_fix:
             # Not having moved since the last report means stopped, whatever
