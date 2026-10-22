@@ -11,6 +11,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers.device_registry import AnyDeviceEntry
 
 from .client import passcode_refused
 from .const import CONF_CALLSIGN, CONF_CALLSIGNS, DOMAIN
@@ -67,3 +68,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: AprsConfigEntry) -> Non
     """Unload a config entry."""
     await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
     await hass.async_add_executor_job(entry.runtime_data.stop)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: AprsConfigEntry, device: AnyDeviceEntry
+) -> bool:
+    """Allow removing a station; it comes back if it is heard again."""
+    return True

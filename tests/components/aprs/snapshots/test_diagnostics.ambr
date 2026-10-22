@@ -1,0 +1,17 @@
+# serializer version: 1
+# name: test_entry_diagnostics
+  dict({
+    'connected': True,
+    'entry_data': dict({
+      'callsign': 'N0CALL',
+      'host': 'aprs.example.com',
+      'password': '**REDACTED**',
+    }),
+    'options': dict({
+      'callsigns': list([
+        'XX0FOO*',
+        'YY0BAR-1',
+      ]),
+    }),
+  })
+# ---

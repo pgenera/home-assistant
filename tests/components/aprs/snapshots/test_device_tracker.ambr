@@ -269,3 +269,16 @@
     <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
   })
 # ---
+# name: test_restore_after_unavailable
+  ReadOnlyDict({
+    'altitude': 376.1,
+    <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'XX0FOO-1',
+    <TrackerEntityStateAttribute.GPS_ACCURACY: 'gps_accuracy'>: 186,
+    <DeviceTrackerEntityStateAttribute.IN_ZONES: 'in_zones'>: list([
+    ]),
+    <EntityStateAttribute.LATITUDE: 'latitude'>: 49.0583,
+    <EntityStateAttribute.LONGITUDE: 'longitude'>: -72.0292,
+    <DeviceTrackerEntityStateAttribute.SOURCE_TYPE: 'source_type'>: <SourceType.GPS: 'gps'>,
+    <DeviceTrackerEntityCapabilityAttribute.TRACKING_TYPE: 'tracking_type'>: <TrackingType.POSITION: 'position'>,
+  })
+# ---

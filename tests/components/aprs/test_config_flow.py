@@ -308,3 +308,54 @@ async def test_options_flow(
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options == {CONF_CALLSIGNS: ["ZZ0BAZ-7"]}
     assert len(mock_setup_entry.mock_calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("user_input", "passcode"),
+    [
+        pytest.param({}, TEST_PASSCODE, id="keep_passcode"),
+        pytest.param({CONF_PASSWORD: ""}, TEST_PASSCODE, id="empty_passcode"),
+        pytest.param({CONF_PASSWORD: "-1"}, "-1", id="receive_only"),
+    ],
+)
+@pytest.mark.usefixtures("mock_unload_entry")
+async def test_reconfigure(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+    user_input: dict[str, str],
+    passcode: str,
+) -> None:
+    """Test changing the server and passcode, recovering from errors."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, data={**RECEIVER_DATA, CONF_PASSWORD: TEST_PASSCODE}
+    )
+    result = await mock_config_entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: TEST_SERVER, CONF_PASSWORD: "12345"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+    mock_client_is.connect.side_effect = AprsConnectionError("no banner from server")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: " aprs2.example.net ", **user_input}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+
+    mock_client_is.connect.side_effect = None
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: " aprs2.example.net ", **user_input}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert mock_config_entry.data == {
+        **RECEIVER_DATA,
+        CONF_HOST: "aprs2.example.net",
+        CONF_PASSWORD: passcode,
+    }

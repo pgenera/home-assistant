@@ -124,10 +124,13 @@ class AprsReceiver:
             target=self._run, name=f"APRS-IS receiver {callsign}", daemon=True
         )
         self._listeners: dict[str | None, list[Callable[[AprsStation], None]]] = {}
+        self._connection_listeners: list[CALLBACK_TYPE] = []
+        self.connected = False
 
     def connect(self) -> None:
         """Log in to the server, raising if it fails."""
         connect(self._ais)
+        self.connected = True
 
     def start(self) -> None:
         """Start reading packets."""
@@ -159,6 +162,28 @@ class AprsReceiver:
 
         return remove_listener
 
+    @callback
+    def async_add_connection_listener(
+        self, update_callback: CALLBACK_TYPE
+    ) -> CALLBACK_TYPE:
+        """Call update_callback when the connection is lost or comes back."""
+        self._connection_listeners.append(update_callback)
+
+        @callback
+        def remove_listener() -> None:
+            self._connection_listeners.remove(update_callback)
+
+        return remove_listener
+
+    def _set_connected(self, connected: bool) -> None:
+        self.hass.loop.call_soon_threadsafe(self._async_set_connected, connected)
+
+    @callback
+    def _async_set_connected(self, connected: bool) -> None:
+        self.connected = connected
+        for update_callback in list(self._connection_listeners):
+            update_callback()
+
     def _run(self) -> None:
         connected = True
         connected_at = time.monotonic()
@@ -179,6 +204,7 @@ class AprsReceiver:
                 _LOGGER.info("Reconnected to APRS-IS server %s", self._host)
                 connected = True
                 connected_at = time.monotonic()
+                self._set_connected(True)
             try:
                 self._ais.consumer(self._receive, immortal=False)
             except AprsConnectionError:
@@ -189,8 +215,7 @@ class AprsReceiver:
                 )
                 # A server that drops us straight away would otherwise be
                 # reconnected to in a tight loop.
-                if time.monotonic() - connected_at < RECONNECT_DELAY:
-                    self._stopping.wait(RECONNECT_DELAY)
+                back_off = time.monotonic() - connected_at < RECONNECT_DELAY
             except Exception:
                 if self._stopping.is_set():
                     return
@@ -200,8 +225,11 @@ class AprsReceiver:
                     self._host,
                 )
                 self._ais.close()
-                self._stopping.wait(RECONNECT_DELAY)
+                back_off = True
             connected = False
+            self._set_connected(False)
+            if back_off:
+                self._stopping.wait(RECONNECT_DELAY)
 
     def _receive(self, msg: dict[str, Any]) -> None:
         _LOGGER.debug("APRS message received: %s", msg)

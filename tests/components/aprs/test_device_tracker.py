@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 
 from aprslib import ConnectionError as AprsConnectionError, LoginError
 import pytest
-from pytest_homeassistant.common import MockConfigEntry, mock_restore_cache
+from pytest_homeassistant.common import (
+    MockConfigEntry,
+    mock_restore_cache,
+    mock_restore_cache_with_extra_data,
+)
+from pytest_homeassistant.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
 from homeassistant.components.aprs.const import CONF_CALLSIGN, CONF_CALLSIGNS, DOMAIN
@@ -21,10 +26,15 @@ from homeassistant.const import (
     CONF_PASSWORD,
     CONF_PLATFORM,
     CONF_USERNAME,
+    STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant, State
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    issue_registry as ir,
+)
 from homeassistant.setup import async_setup_component
 
 from .conftest import TEST_PASSCODE, TEST_RECEIVER, TEST_SERVER, MockAprsIs
@@ -544,3 +554,152 @@ async def test_quick_drop_backs_off(
 
     assert mock_aprs_is.client.connect.call_count == 1
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
+
+
+async def test_unavailable_while_disconnected(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test trackers are unavailable until the receiver reconnects."""
+    await _async_setup(hass, mock_config_entry)
+    await mock_aprs_is.async_receive(hass, POSITION)
+    connecting = threading.Event()
+    release = threading.Event()
+
+    def _slow_connect() -> None:
+        connecting.set()
+        assert release.wait(5)
+
+    mock_aprs_is.client.connect.side_effect = _slow_connect
+    with patch("homeassistant.components.aprs.receiver.RECONNECT_DELAY", 0):
+        await hass.async_add_executor_job(mock_aprs_is.drop_connection)
+        assert await hass.async_add_executor_job(connecting.wait, 5)
+        await hass.async_block_till_done()
+        assert hass.states.get(TRACKER).state == STATE_UNAVAILABLE
+
+        release.set()
+        await mock_aprs_is.async_wait_consuming(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(TRACKER).state == "not_home"
+
+
+async def test_restore_after_unavailable(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+    snapshot: SnapshotAssertion,
+) -> None:
+    """Test the last position survives a restart while disconnected."""
+    mock_config_entry.add_to_hass(hass)
+    entity_registry.async_get_or_create(
+        DEVICE_TRACKER_DOMAIN,
+        DOMAIN,
+        f"{TEST_RECEIVER}_XX0FOO-1",
+        config_entry=mock_config_entry,
+        suggested_object_id="xx0foo_1",
+    )
+    mock_restore_cache_with_extra_data(
+        hass,
+        [
+            (
+                State(TRACKER, STATE_UNAVAILABLE),
+                {
+                    "name": "XX0FOO-1",
+                    "latitude": 49.0583,
+                    "longitude": -72.0292,
+                    "gps_accuracy": 186,
+                    "attributes": {"altitude": 376.1},
+                },
+            )
+        ],
+    )
+
+    await _async_setup(hass, mock_config_entry)
+
+    state = hass.states.get(TRACKER)
+    assert state.state == "not_home"
+    assert state.attributes == snapshot
+
+
+async def test_remove_station_device(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    device_registry: dr.DeviceRegistry,
+    mock_config_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test a station's device can be removed and comes back when heard."""
+    assert await async_setup_component(hass, "config", {})
+    await _async_setup(hass, mock_config_entry)
+    await mock_aprs_is.async_receive(hass, POSITION)
+    device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, f"{TEST_RECEIVER}_XX0FOO-1"), mock_config_entry.entry_id
+    )
+    assert device is not None
+
+    client = await hass_ws_client(hass)
+    response = await client.remove_device(device.id)
+    await hass.async_block_till_done()
+
+    assert response["success"]
+    assert hass.states.get(TRACKER) is None
+
+    await mock_aprs_is.async_receive(hass, POSITION)
+    assert hass.states.get(TRACKER).state == "not_home"
+
+
+async def test_known_station_without_saved_state(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test a known station with nothing saved starts with no position."""
+    mock_config_entry.add_to_hass(hass)
+    entity_registry.async_get_or_create(
+        DEVICE_TRACKER_DOMAIN,
+        DOMAIN,
+        f"{TEST_RECEIVER}_XX0FOO-1",
+        config_entry=mock_config_entry,
+        suggested_object_id="xx0foo_1",
+    )
+
+    await _async_setup(hass, mock_config_entry)
+
+    assert hass.states.get(TRACKER).state == STATE_UNKNOWN
+
+
+async def test_restore_unreadable_extra_data(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_config_entry: MockConfigEntry,
+    mock_aprs_is: MockAprsIs,
+) -> None:
+    """Test saved data in another format falls back to the saved state."""
+    mock_config_entry.add_to_hass(hass)
+    entity_registry.async_get_or_create(
+        DEVICE_TRACKER_DOMAIN,
+        DOMAIN,
+        f"{TEST_RECEIVER}_XX0FOO-1",
+        config_entry=mock_config_entry,
+        suggested_object_id="xx0foo_1",
+    )
+    mock_restore_cache_with_extra_data(
+        hass,
+        [
+            (
+                State(
+                    TRACKER,
+                    "not_home",
+                    {ATTR_LATITUDE: 49.0583, ATTR_LONGITUDE: -72.0292},
+                ),
+                {"name": "XX0FOO-1", "position": [49.0583, -72.0292]},
+            )
+        ],
+    )
+
+    await _async_setup(hass, mock_config_entry)
+
+    assert hass.states.get(TRACKER).attributes[ATTR_LATITUDE] == 49.0583

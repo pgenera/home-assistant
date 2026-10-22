@@ -10,7 +10,6 @@ from aprslib import ConnectionError as AprsConnectionError, LoginError
 import probatio
 
 from homeassistant.config_entries import (
-    ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlowWithReload,
@@ -23,6 +22,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from . import AprsConfigEntry
 from .client import AprsIsClient, passcode_refused
 from .const import (
     CONF_CALLSIGN,
@@ -55,6 +55,12 @@ OPTIONS_SCHEMA = probatio.Schema(
         probatio.Required(CONF_CALLSIGNS): TextSelector(
             TextSelectorConfig(multiple=True)
         ),
+    }
+)
+STEP_RECONFIGURE_SCHEMA = probatio.Schema(
+    {
+        probatio.Optional(probatio.Secret(CONF_PASSWORD)): PASSCODE_SELECTOR,
+        probatio.Required(CONF_HOST): TextSelector(),
     }
 )
 STEP_REAUTH_SCHEMA = probatio.Schema(
@@ -124,7 +130,7 @@ class AprsConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     @override
-    def async_get_options_flow(config_entry: ConfigEntry) -> AprsOptionsFlow:
+    def async_get_options_flow(config_entry: AprsConfigEntry) -> AprsOptionsFlow:
         """Get the options flow."""
         return AprsOptionsFlow()
 
@@ -212,6 +218,38 @@ class AprsConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_REAUTH_SCHEMA,
             errors=errors,
             description_placeholders={CONF_CALLSIGN: reauth_entry.data[CONF_CALLSIGN]},
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the server or passcode."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            # Leaving the passcode empty keeps the current one.
+            updates = {
+                CONF_PASSWORD: user_input.get(CONF_PASSWORD)
+                or reconfigure_entry.data[CONF_PASSWORD],
+                CONF_HOST: user_input[CONF_HOST].strip(),
+            }
+            errors = await _async_login_errors(
+                self.hass, {**reconfigure_entry.data, **updates}
+            )
+            if not errors:
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry, data_updates=updates
+                )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(
+                STEP_RECONFIGURE_SCHEMA,
+                {CONF_HOST: (user_input or reconfigure_entry.data)[CONF_HOST]},
+            ),
+            errors=errors,
+            description_placeholders={
+                CONF_CALLSIGN: reconfigure_entry.data[CONF_CALLSIGN]
+            },
         )
 
 

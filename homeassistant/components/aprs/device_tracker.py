@@ -1,5 +1,7 @@
 """Support for APRS device tracking."""
 
+import contextlib
+from dataclasses import asdict
 from typing import Any, override
 from urllib.parse import quote
 
@@ -30,7 +32,11 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.restore_state import (
+    ExtraStoredData,
+    RestoredExtraData,
+    RestoreEntity,
+)
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from . import AprsConfigEntry
@@ -194,15 +200,24 @@ class AprsTrackerEntity(TrackerEntity, RestoreEntity):
         self.async_on_remove(
             self._receiver.async_add_listener(self._async_station_heard, self._name)
         )
-        if (
-            self._station is not None
-            or (state := await self.async_get_last_state()) is None
-        ):
-            return
+        self.async_on_remove(
+            self._receiver.async_add_connection_listener(self.async_write_ha_state)
+        )
+        if self._station is None:
+            self._station = await self._async_restore_station()
+
+    async def _async_restore_station(self) -> AprsStation | None:
+        # An unavailable state has no position, so it is kept separately.
+        if (extra_data := await self.async_get_last_extra_data()) is not None:
+            # Data saved with other fields falls back to the state.
+            with contextlib.suppress(TypeError):
+                return AprsStation(**extra_data.as_dict())
+        if (state := await self.async_get_last_state()) is None:
+            return None
         attributes = state.attributes
         if ATTR_LATITUDE not in attributes or ATTR_LONGITUDE not in attributes:
-            return
-        self._station = AprsStation(
+            return None
+        return AprsStation(
             name=self._name,
             latitude=attributes[ATTR_LATITUDE],
             longitude=attributes[ATTR_LONGITUDE],
@@ -213,6 +228,20 @@ class AprsTrackerEntity(TrackerEntity, RestoreEntity):
                 if attr in attributes
             },
         )
+
+    @property
+    @override
+    def extra_restore_state_data(self) -> ExtraStoredData | None:
+        """Return the last position heard, to restore after a restart."""
+        return (
+            None if self._station is None else RestoredExtraData(asdict(self._station))
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        """Return whether the receiver is connected."""
+        return self._receiver.connected
 
     @property
     @override

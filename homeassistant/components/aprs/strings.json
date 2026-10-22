@@ -26,6 +26,18 @@
         "description": "APRS-IS refused the passcode for {callsign}.",
         "title": "[%key:common::config_flow::title::reauth%]"
       },
+      "reconfigure": {
+        "data": {
+          "host": "[%key:component::aprs::config::step::user::data::host%]",
+          "password": "[%key:component::aprs::config::step::user::data::password%]"
+        },
+        "data_description": {
+          "host": "[%key:component::aprs::config::step::user::data_description::host%]",
+          "password": "APRS-IS passcode for the callsign, or -1 to log in receive-only. Leave it empty to keep the current one."
+        },
+        "description": "Change the server or passcode {callsign} logs in with.",
+        "title": "Reconfigure {callsign}"
+      },
       "user": {
         "data": {
           "callsign": "Login callsign",
