@@ -1,9 +1,10 @@
 # serializer version: 1
-# name: test_entry_diagnostics
+# name: test_receiver_diagnostics
   dict({
     'connected': True,
     'entry_data': dict({
       'callsign': 'N0CALL',
+      'entry_type': 'receiver',
       'host': 'aprs.example.com',
       'password': '**REDACTED**',
     }),
@@ -12,6 +13,34 @@
         'XX0FOO*',
         'YY0BAR-1',
       ]),
+    }),
+  })
+# ---
+# name: test_station_diagnostics
+  dict({
+    'entry_data': dict({
+      'callsign': 'N0CALL-13',
+      'entry_type': 'station',
+      'host': 'aprs.example.com',
+      'password': '**REDACTED**',
+    }),
+    'last_report': '2026-10-21T09:05:00+00:00',
+    'options': dict({
+      'location_entity': 'zone.home',
+      'position_ambiguity': 0,
+      'symbol': '/_',
+      'weather': dict({
+        'humidity': 'sensor.humidity',
+        'luminosity': 'sensor.irradiance',
+        'pressure': 'sensor.pressure',
+        'rain_1h': 'sensor.rain_1h',
+        'rain_24h': 'sensor.rain_24h',
+        'rain_since_midnight': 'sensor.rain_today',
+        'temperature': 'sensor.temperature',
+        'wind_direction': 'sensor.wind_direction',
+        'wind_gust': 'sensor.wind_gust',
+        'wind_speed': 'sensor.wind_speed',
+      }),
     }),
   })
 # ---

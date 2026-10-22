@@ -125,6 +125,7 @@ async def async_setup_entry(
 ) -> None:
     """Track the stations a receiver hears."""
     receiver = entry.runtime_data
+    assert isinstance(receiver, AprsReceiver)
     assert entry.unique_id
     unique_id = entry.unique_id
     prefix = f"{unique_id}_"

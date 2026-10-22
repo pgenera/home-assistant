@@ -15,7 +15,13 @@ from pytest_homeassistant.common import (
 from pytest_homeassistant.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
-from homeassistant.components.aprs.const import CONF_CALLSIGN, CONF_CALLSIGNS, DOMAIN
+from homeassistant.components.aprs.const import (
+    CONF_CALLSIGN,
+    CONF_CALLSIGNS,
+    CONF_ENTRY_TYPE,
+    DOMAIN,
+    ENTRY_TYPE_RECEIVER,
+)
 from homeassistant.components.aprs.receiver import gps_accuracy, make_filter
 from homeassistant.components.device_tracker import DOMAIN as DEVICE_TRACKER_DOMAIN
 from homeassistant.const import (
@@ -356,6 +362,7 @@ async def test_yaml_import(
     assert len(entries) == 1
     assert entries[0].unique_id == TEST_RECEIVER
     assert entries[0].data == {
+        CONF_ENTRY_TYPE: ENTRY_TYPE_RECEIVER,
         CONF_CALLSIGN: TEST_RECEIVER,
         CONF_PASSWORD: TEST_PASSCODE,
         CONF_HOST: TEST_SERVER,
