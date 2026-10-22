@@ -1,0 +1,98 @@
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: This integration does not provide actions.
+  appropriate-polling:
+    status: exempt
+    comment: Positions are pushed by the APRS-IS server.
+  brands: done
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency:
+    status: todo
+    comment: aprslib releases are not published to PyPI from a CI pipeline.
+  docs-actions:
+    status: exempt
+    comment: This integration does not provide actions.
+  docs-conditions:
+    status: exempt
+    comment: This integration does not provide conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: This integration does not provide triggers.
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions:
+    status: exempt
+    comment: This integration does not provide actions.
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: todo
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: todo
+  discovery:
+    status: exempt
+    comment: APRS-IS is an internet service and cannot be discovered.
+  discovery-update-info:
+    status: exempt
+    comment: APRS-IS is an internet service and cannot be discovered.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices:
+    status: exempt
+    comment: This integration connects to a service, not to devices.
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices: done
+  entity-category: done
+  entity-device-class:
+    status: exempt
+    comment: Device trackers have no device classes.
+  entity-disabled-by-default:
+    status: exempt
+    comment: Every tracker is for a station the user asked to track.
+  entity-translations:
+    status: exempt
+    comment: Trackers are named after their station's device.
+  exception-translations: done
+  icon-translations:
+    status: exempt
+    comment: This integration does not set icons.
+  reconfiguration-flow: todo
+  repair-issues: done
+  stale-devices: todo
+
+  # Platinum
+  async-dependency:
+    status: todo
+    comment: aprslib is synchronous, so the receiver reads on its own thread.
+  inject-websession:
+    status: exempt
+    comment: APRS-IS uses a plain TCP connection, not HTTP.
+  strict-typing:
+    status: todo
+    comment: |
+      The integration is in .strict-typing, but aprslib and geopy do not ship
+      type information (PEP 561).

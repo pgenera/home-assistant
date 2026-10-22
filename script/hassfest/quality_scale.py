@@ -147,7 +147,6 @@ INTEGRATIONS_WITHOUT_QUALITY_SCALE_FILE = [
     "apple_tv",
     "apprise",
     "aprilaire",
-    "aprs",
     "apsystems",
     "aquacell",
     "aqualogic",

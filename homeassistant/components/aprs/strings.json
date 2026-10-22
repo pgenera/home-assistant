@@ -1,0 +1,92 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:component::aprs::config::error::invalid_auth%]",
+      "invalid_callsign": "[%key:component::aprs::config::error::invalid_callsign%]",
+      "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "The passcode is not valid for this callsign.",
+      "invalid_callsign": "Enter a callsign, optionally with an SSID, such as N0CALL-13.",
+      "invalid_callsigns": "Enter one or more callsigns to track, such as N0CALL-9, or N0CALL* for every SSID.",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "step": {
+      "reauth_confirm": {
+        "data": {
+          "password": "[%key:component::aprs::config::step::user::data::password%]"
+        },
+        "data_description": {
+          "password": "[%key:component::aprs::config::step::user::data_description::password%]"
+        },
+        "description": "APRS-IS refused the passcode for {callsign}.",
+        "title": "[%key:common::config_flow::title::reauth%]"
+      },
+      "user": {
+        "data": {
+          "callsign": "Login callsign",
+          "callsigns": "Tracked callsigns",
+          "host": "Server",
+          "password": "Passcode"
+        },
+        "data_description": {
+          "callsign": "Callsign to log in to APRS-IS with.",
+          "callsigns": "Stations to track. End a callsign with * to track every SSID. Weather stations are not tracked.",
+          "host": "APRS-IS server to receive from.",
+          "password": "APRS-IS passcode for the callsign. Optional; leave empty to log in receive-only."
+        },
+        "title": "Track stations"
+      }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Could not connect to APRS-IS server {host}."
+    },
+    "invalid_auth": {
+      "message": "APRS-IS refused the passcode for {callsign}."
+    }
+  },
+  "issues": {
+    "yaml_import_cannot_connect": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because Home Assistant could not connect to the APRS-IS server {host}.\n\nCheck that the server is reachable, then restart Home Assistant to try again, or remove the APRS `device_tracker` configuration from your configuration.yaml file and set up the APRS integration in the UI.",
+      "title": "The APRS YAML configuration could not be imported"
+    },
+    "yaml_import_invalid_auth": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because the APRS-IS server refused its passcode.\n\nFix or remove the `password` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
+    },
+    "yaml_import_invalid_callsign": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because its `username` is not a valid callsign. It must be a callsign, optionally with an SSID, such as N0CALL-13.\n\nFix the `username` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
+    },
+    "yaml_import_invalid_callsigns": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed because its `callsigns` are not valid. Each must be a callsign, optionally with an SSID or ending in * for every SSID.\n\nFix the `callsigns` in the APRS `device_tracker` configuration in your configuration.yaml file and restart Home Assistant, or remove that configuration and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
+    },
+    "yaml_import_unknown": {
+      "description": "Importing the APRS device tracker configuration for {callsign} failed with an unexpected error; check the logs for details.\n\nRestart Home Assistant to try again, or remove the APRS `device_tracker` configuration from your configuration.yaml file and set up the APRS integration in the UI.",
+      "title": "[%key:component::aprs::issues::yaml_import_cannot_connect::title%]"
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "callsigns": "[%key:component::aprs::config::step::user::data::callsigns%]"
+        },
+        "data_description": {
+          "callsigns": "[%key:component::aprs::config::step::user::data_description::callsigns%]"
+        },
+        "title": "[%key:component::aprs::config::step::user::title%]"
+      }
+    }
+  }
+}

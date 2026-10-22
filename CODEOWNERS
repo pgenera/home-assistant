@@ -161,8 +161,8 @@ CLAUDE.md @home-assistant/core
 /tests/components/apprise/ @caronc
 /homeassistant/components/aprilaire/ @chamberlain2007
 /tests/components/aprilaire/ @chamberlain2007
-/homeassistant/components/aprs/ @PhilRW
-/tests/components/aprs/ @PhilRW
+/homeassistant/components/aprs/ @PhilRW @pgenera
+/tests/components/aprs/ @PhilRW @pgenera
 /homeassistant/components/apsystems/ @mawoka-myblock @SonnenladenGmbH
 /tests/components/apsystems/ @mawoka-myblock @SonnenladenGmbH
 /homeassistant/components/aquacell/ @Jordi1990
