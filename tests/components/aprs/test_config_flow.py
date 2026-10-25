@@ -12,7 +12,10 @@ from homeassistant.components.aprs.const import (
     CONF_CALLSIGNS,
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
+    CONF_MOTION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_REPORT_INTERVAL,
+    CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
@@ -44,6 +47,9 @@ POSITION_OPTIONS = {
     CONF_COMMENT: "On the road",
     CONF_POSITION_AMBIGUITY: 1,
     CONF_SUPPRESS_TEMPLATE: "{{ distance('device_tracker.car', 'zone.home') < 1 }}",
+    CONF_MOTION_ENTITY: "device_tracker.phone",
+    CONF_SMART_BEACONING: False,
+    CONF_REPORT_INTERVAL: 15,
     CONF_WEATHER: {},
 }
 RECEIVER_INPUT = {
@@ -255,6 +261,11 @@ async def test_station_flow_already_configured(
             {CONF_SYMBOL: "/-", CONF_WEATHER: {}, CONF_COMMENT: "x" * 44},
             {CONF_COMMENT: "comment_too_long"},
             id="comment_too_long_fixed",
+        ),
+        pytest.param(
+            {CONF_REPORT_INTERVAL: 4},
+            {CONF_REPORT_INTERVAL: "weather_interval_too_short"},
+            id="weather_interval_too_short",
         ),
     ],
 )

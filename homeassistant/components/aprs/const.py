@@ -10,7 +10,10 @@ CONF_CALLSIGNS: Final = "callsigns"
 CONF_COMMENT: Final = "comment"
 CONF_ENTRY_TYPE: Final = "entry_type"
 CONF_LOCATION_ENTITY: Final = "location_entity"
+CONF_MOTION_ENTITY: Final = "motion_entity"
 CONF_POSITION_AMBIGUITY: Final = "position_ambiguity"
+CONF_REPORT_INTERVAL: Final = "report_interval"
+CONF_SMART_BEACONING: Final = "smart_beaconing"
 CONF_SUPPRESS_TEMPLATE: Final = "suppress_template"
 CONF_SYMBOL: Final = "symbol"
 CONF_WEATHER: Final = "weather"
@@ -46,20 +49,13 @@ WEATHER_SYMBOL_CODE: Final = "_"
 
 ZONE_DOMAIN: Final = "zone"
 
-# Weather networks ask for one report every 5-10 minutes; fixed positions
-# need far less.
+# Weather networks ask for one report every 5-10 minutes, and no more often;
+# fixed positions need far less.
 WEATHER_INTERVAL: Final = timedelta(minutes=10)
 POSITION_INTERVAL: Final = timedelta(minutes=30)
+MIN_WEATHER_INTERVAL: Final = timedelta(minutes=5)
 
-# SmartBeaconing™ (a trademark of HamHUD.net), with the usual tracker
-# defaults: POSITION_INTERVAL at or below SLOW_SPEED, FAST_RATE at or above
-# FAST_SPEED, and a report after a turn of more than
-# MIN_TURN_ANGLE + TURN_SLOPE / speed degrees.
-SLOW_SPEED: Final = 5
-FAST_SPEED: Final = 60
-FAST_RATE: Final = timedelta(minutes=3)
-MIN_TURN_ANGLE: Final = 28
-TURN_SLOPE: Final = 255
+# The least time between reports for a turn or stop.
 MIN_TURN_TIME: Final = timedelta(seconds=30)
 
 # Faster than this between two positions, in mph, is a jump rather than travel.

@@ -134,6 +134,12 @@ def format_course_speed(course: float, speed: float) -> str:
     return f"{(_clamp(course, 0, 360) or 360):03d}/{_clamp(speed, 0, 999):03d}"
 
 
+def format_altitude(meters: float) -> str:
+    """Format altitude in meters for the comment."""
+    feet = _clamp(meters / 0.3048, -99999, 999999)
+    return f"/A={feet:06d}" if feet >= 0 else f"/A=-{-feet:05d}"
+
+
 def build_report(
     callsign: str,
     timestamp: datetime,
@@ -141,14 +147,24 @@ def build_report(
     weather: WeatherData | None,
     comment: str,
     course_speed: str = "",
+    altitude: float | None = None,
 ) -> str:
     """Build a timestamped position report, with weather data if given.
 
     The / data type marks a station without APRS messaging. course_speed is
     only used without weather data, where that extension carries the wind.
+    Altitude in meters goes first in the comment, which is shortened to
+    leave room for it.
     """
     body = f"/{timestamp:%d%H%M}z{position}"
-    body += course_speed if weather is None else format_weather(weather)
+    extension = course_speed if weather is None else format_weather(weather)
+    body += extension
     # A line break would end the packet and start another under our login.
     comment = _INVALID_COMMENT_CHARS.sub("", comment)
+    if altitude is not None:
+        altitude_text = format_altitude(altitude)
+        room = (
+            COMMENT_MAX_LENGTH_AFTER_EXTENSION if extension else COMMENT_MAX_LENGTH
+        ) - len(altitude_text)
+        comment = altitude_text + comment[:room]
     return f"{callsign}>{TOCALL},TCPIP*:{body}{comment}"

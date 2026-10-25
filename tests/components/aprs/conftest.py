@@ -22,6 +22,7 @@ from homeassistant.components.aprs.const import (
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_SMART_BEACONING,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
     CONF_WEATHER,
@@ -70,6 +71,7 @@ WEATHER_OPTIONS = {
     CONF_LOCATION_ENTITY: "zone.home",
     CONF_SYMBOL: "/_",
     CONF_POSITION_AMBIGUITY: 0,
+    CONF_SMART_BEACONING: True,
     CONF_WEATHER: WEATHER_ENTITIES,
 }
 

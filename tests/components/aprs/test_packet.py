@@ -8,6 +8,7 @@ import pytest
 from homeassistant.components.aprs.packet import (
     WeatherData,
     build_report,
+    format_altitude,
     format_course_speed,
     format_position,
     format_weather,
@@ -171,3 +172,16 @@ def test_build_report_course_speed() -> None:
     assert parsed["course"] == 88
     assert parsed["speed"] == pytest.approx(36 * 1.852)
     assert parsed["comment"] == "Mobile"
+
+
+@pytest.mark.parametrize(
+    ("meters", "expected"),
+    [
+        pytest.param(100.4, "/A=000329", id="positive"),
+        pytest.param(-30.5, "/A=-00100", id="below_sea_level"),
+        pytest.param(1e9, "/A=999999", id="clamped"),
+    ],
+)
+def test_format_altitude(meters: float, expected: str) -> None:
+    """Test altitude is sent in feet, six characters including any sign."""
+    assert format_altitude(meters) == expected

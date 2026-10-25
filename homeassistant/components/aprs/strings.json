@@ -18,6 +18,7 @@
       "invalid_comment": "Use only printable ASCII characters other than | and ~. Don't start the comment with something like 123/456, which reads as course and speed, or for a weather station with a letter and digit such as h50, which reads as weather data.",
       "invalid_symbol": "Enter a symbol table character (/, \\ or an overlay letter or digit) followed by the symbol code, such as /_ for a weather station.",
       "unknown": "[%key:common::config_flow::error::unknown%]",
+      "weather_interval_too_short": "Weather networks ask for no more than one report every 5 minutes.",
       "weather_symbol_required": "Weather data can only be sent with a weather station symbol, such as /_."
     },
     "step": {
@@ -62,18 +63,24 @@
         "data": {
           "comment": "Comment",
           "location_entity": "Location",
+          "motion_entity": "Motion source",
           "position_ambiguity": "Position ambiguity",
+          "report_interval": "Report interval",
+          "smart_beaconing": "SmartBeaconing",
           "suppress_template": "Suppress reports when",
           "symbol": "Symbol"
         },
         "data_description": {
-          "comment": "Text sent at the end of each report: up to 43 characters, or 36 for a weather station or a moving location.",
-          "location_entity": "Zone, person or device tracker whose position is reported. Moving entities report more often the faster they go, from every 30 minutes when stopped to every 3 minutes at 60 mph (about 100 km/h), and soon after turning; their course and speed are included.",
+          "comment": "Text sent at the end of each report: up to 43 characters, or 36 for a weather station or a moving location. It is shortened to make room for altitude, when sent.",
+          "location_entity": "Zone, person or device tracker whose position is reported.",
+          "motion_entity": "Optional device tracker whose reported speed, course and altitude are sent, such as a phone's when the location is a person. Defaults to the location. Speed, course and altitude are only sent when the device reports them.",
           "position_ambiguity": "Number of trailing position digits to leave out, from 0 (exact) to 4 (nearest degree).",
+          "report_interval": "Minutes between reports, or the longest gap with SmartBeaconing. Defaults to 10 with weather data (at least 5) and 30 without.",
+          "smart_beaconing": "For a person or device tracker, report more often the faster it moves (every 3 to 5 minutes at speed, walking or driving), soon after turning or stopping, and at the report interval when stopped. Turned off, it reports at the report interval.",
           "suppress_template": "Optional template; while it renders true, no reports are sent, for example near home. A report goes out as soon as it renders false again. If it fails to render, reports are held back too.",
           "symbol": "APRS symbol table and code, such as /_ for a weather station or /- for a house."
         },
-        "description": "Choose what the station reports. Reports with weather are sent every 10 minutes, position-only reports every 30 minutes.",
+        "description": "Choose what the station reports.",
         "sections": {
           "weather": {
             "data": {
@@ -171,6 +178,7 @@
       "invalid_callsigns": "[%key:component::aprs::config::error::invalid_callsigns%]",
       "invalid_comment": "[%key:component::aprs::config::error::invalid_comment%]",
       "invalid_symbol": "[%key:component::aprs::config::error::invalid_symbol%]",
+      "weather_interval_too_short": "[%key:component::aprs::config::error::weather_interval_too_short%]",
       "weather_symbol_required": "[%key:component::aprs::config::error::weather_symbol_required%]"
     },
     "step": {
@@ -187,14 +195,20 @@
         "data": {
           "comment": "[%key:component::aprs::config::step::station::data::comment%]",
           "location_entity": "[%key:component::aprs::config::step::station::data::location_entity%]",
+          "motion_entity": "[%key:component::aprs::config::step::station::data::motion_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data::position_ambiguity%]",
+          "report_interval": "[%key:component::aprs::config::step::station::data::report_interval%]",
+          "smart_beaconing": "[%key:component::aprs::config::step::station::data::smart_beaconing%]",
           "suppress_template": "[%key:component::aprs::config::step::station::data::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data::symbol%]"
         },
         "data_description": {
           "comment": "[%key:component::aprs::config::step::station::data_description::comment%]",
           "location_entity": "[%key:component::aprs::config::step::station::data_description::location_entity%]",
+          "motion_entity": "[%key:component::aprs::config::step::station::data_description::motion_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data_description::position_ambiguity%]",
+          "report_interval": "[%key:component::aprs::config::step::station::data_description::report_interval%]",
+          "smart_beaconing": "[%key:component::aprs::config::step::station::data_description::smart_beaconing%]",
           "suppress_template": "[%key:component::aprs::config::step::station::data_description::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data_description::symbol%]"
         },

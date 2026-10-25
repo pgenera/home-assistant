@@ -1,6 +1,7 @@
 """Publish position and weather reports to APRS-IS."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
 import math
@@ -53,11 +54,14 @@ from .const import (
     CONF_HUMIDITY,
     CONF_LOCATION_ENTITY,
     CONF_LUMINOSITY,
+    CONF_MOTION_ENTITY,
     CONF_POSITION_AMBIGUITY,
     CONF_PRESSURE,
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_REPORT_INTERVAL,
+    CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
@@ -68,15 +72,28 @@ from .const import (
     MAX_SPEED,
     MIN_TURN_TIME,
     POSITION_INTERVAL,
-    SLOW_SPEED,
     WEATHER_INTERVAL,
     WEATHER_SYMBOL_CODE,
     ZONE_DOMAIN,
 )
 from .packet import WeatherData, build_report, format_course_speed, format_position
-from .smartbeacon import STOPPED, Fix, Motion, beacon_rate, motion, turned
+from .smartbeacon import (
+    METERS_PER_SECOND_TO_MPH,
+    STOPPED,
+    Fix,
+    Motion,
+    SpeedHistory,
+    beacon_rate,
+    travel_speed,
+    turned,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+# Device tracker attributes the Companion apps report, in m/s, degrees and m.
+ATTR_ALTITUDE = "altitude"
+ATTR_COURSE = "course"
+ATTR_SPEED = "speed"
 
 # Converter and APRS unit for each weather field. Fields without a converter
 # are sent as-is when they are in the given unit (or have no unit at all).
@@ -92,6 +109,17 @@ WEATHER_UNITS: dict[str, tuple[type[BaseUnitConverter] | None, str | None]] = {
     CONF_RAIN_SINCE_MIDNIGHT: (DistanceConverter, UnitOfLength.INCHES),
     CONF_LUMINOSITY: (None, UnitOfIrradiance.WATTS_PER_SQUARE_METER),
 }
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReportedMotion:
+    """Course, speed and altitude as the device reported them."""
+
+    speed: float | None = None
+    """Mph."""
+    course: float | None = None
+    altitude: float | None = None
+    """Meters."""
 
 
 class AprsPublisher:
@@ -110,6 +138,9 @@ class AprsPublisher:
         self._passcode_refused_callback = passcode_refused_callback
         self.last_report: datetime | None = None
         self._location_entity: str = options[CONF_LOCATION_ENTITY]
+        self._motion_entity: str = (
+            options.get(CONF_MOTION_ENTITY) or self._location_entity
+        )
         self._symbol: str = options[CONF_SYMBOL]
         self._comment: str = options.get(CONF_COMMENT, "")
         self._ambiguity = int(options[CONF_POSITION_AMBIGUITY])
@@ -124,8 +155,17 @@ class AprsPublisher:
             else None
         )
         self._moving = split_entity_id(self._location_entity)[0] != ZONE_DOMAIN
+        self._smart_beaconing = self._moving and options.get(CONF_SMART_BEACONING, True)
+        self._interval = (
+            timedelta(minutes=interval)
+            if (interval := options.get(CONF_REPORT_INTERVAL))
+            else WEATHER_INTERVAL
+            if self.sends_weather
+            else POSITION_INTERVAL
+        )
         self._fix: Fix | None = None
         self._motion = STOPPED
+        self._history = SpeedHistory()
         self._reported_fix: Fix | None = None
         self._reported_course: float | None = None
         self._stop_unreported = False
@@ -140,10 +180,6 @@ class AprsPublisher:
         """Return whether reports carry weather data."""
         return self._symbol[1] == WEATHER_SYMBOL_CODE
 
-    @property
-    def _slow_rate(self) -> timedelta:
-        return WEATHER_INTERVAL if self.sends_weather else POSITION_INTERVAL
-
     @callback
     def async_start(self) -> CALLBACK_TYPE:
         """Start sending reports; returns a callback that stops it."""
@@ -157,7 +193,7 @@ class AprsPublisher:
             info.async_refresh()
             unsubscribers.append(info.async_remove)
         unsubscribers.append(async_at_started(self.hass, self._async_send_scheduled))
-        if self._moving:
+        if self._smart_beaconing:
             if (state := self.hass.states.get(self._location_entity)) is not None:
                 self._fix = _fix_from_state(state)
             unsubscribers.append(
@@ -165,13 +201,15 @@ class AprsPublisher:
                     self.hass, self._location_entity, self._async_location_changed
                 )
             )
-        # A moving station checks often, so a report that is not due yet
-        # goes out with the latest position as soon as it is.
+        # SmartBeaconing checks often, so a report that is not due yet goes
+        # out with the latest position as soon as it is.
         unsubscribers.append(
             async_track_time_interval(
                 self.hass,
-                self._async_evaluate if self._moving else self._async_send_scheduled,
-                MIN_TURN_TIME if self._moving else self._slow_rate,
+                self._async_evaluate
+                if self._smart_beaconing
+                else self._async_send_scheduled,
+                MIN_TURN_TIME if self._smart_beaconing else self._interval,
                 name="APRS-IS report",
                 cancel_on_shutdown=True,
             )
@@ -198,6 +236,25 @@ class AprsPublisher:
     async def _async_send_scheduled(self, *_: Any) -> None:
         await self.async_send_report()
 
+    def _reported_motion(self) -> ReportedMotion:
+        if (
+            not self._moving
+            or (state := self.hass.states.get(self._motion_entity)) is None
+        ):
+            return ReportedMotion()
+        values = {
+            attr: value
+            for attr in (ATTR_SPEED, ATTR_COURSE, ATTR_ALTITUDE)
+            if isinstance(value := state.attributes.get(attr), int | float)
+            and math.isfinite(value)
+        }
+        speed = values.get(ATTR_SPEED)
+        return ReportedMotion(
+            speed=None if speed is None else max(speed, 0) * METERS_PER_SECOND_TO_MPH,
+            course=values.get(ATTR_COURSE),
+            altitude=values.get(ATTR_ALTITUDE),
+        )
+
     async def _async_location_changed(
         self, event: Event[EventStateChangedData]
     ) -> None:
@@ -205,27 +262,43 @@ class AprsPublisher:
             fix := _fix_from_state(new_state)
         ) is None:
             return
+        reported = self._reported_motion()
         if self._fix is None:
             self._fix = fix
-        elif (current := motion(self._fix, fix)).course is None:
+            current = Motion(speed=reported.speed or 0, course=reported.course)
+        elif (speed := travel_speed(self._fix, fix)) is None:
             # Within the last fix's accuracy, so distance keeps adding up from
-            # it; staying there a while means the station stopped.
-            if fix.time - self._fix.time < MIN_TURN_TIME:
+            # it. It has stopped once it would have left that circle at the
+            # slow speed.
+            if reported.speed is None and fix.time - self._fix.time < max(
+                MIN_TURN_TIME,
+                timedelta(
+                    seconds=max(self._fix.accuracy, fix.accuracy)
+                    * METERS_PER_SECOND_TO_MPH
+                    / self._history.profile.slow_speed
+                ),
+            ):
                 return
-            self._set_motion(STOPPED)
-        elif current.speed > MAX_SPEED:
+            current = Motion(speed=reported.speed or 0, course=reported.course)
+        elif speed > MAX_SPEED:
             # A jump, such as a person switching trackers, is not travel.
-            self._set_motion(STOPPED)
             self._fix = fix
+            current = STOPPED
         else:
-            self._set_motion(current)
             self._fix = fix
+            current = Motion(
+                speed=speed if reported.speed is None else reported.speed,
+                course=reported.course,
+            )
+        self._history.add(fix.time, current.speed)
+        self._set_motion(current)
         await self._async_evaluate()
 
     def _set_motion(self, current: Motion) -> None:
-        if current.course is None:
-            # Below SLOW_SPEED the stopped rate applies anyway.
-            self._stop_unreported |= self._motion.speed > SLOW_SPEED
+        slow_speed = self._history.profile.slow_speed
+        if current.speed <= slow_speed:
+            # Below the slow speed the stopped rate applies anyway.
+            self._stop_unreported |= self._motion.speed > slow_speed
         else:
             self._stop_unreported = False
         self._motion = current
@@ -236,18 +309,20 @@ class AprsPublisher:
             # The first report goes out once Home Assistant has started.
             return
         if self._last_attempt is not None:
+            profile = self._history.profile
             elapsed = dt_util.utcnow() - self._last_attempt
             rate = (
-                self._slow_rate
+                self._interval
                 if self._fix == self._reported_fix
-                else min(beacon_rate(self._motion.speed), self._slow_rate)
+                else beacon_rate(self._motion.speed, profile, self._interval)
             )
             # Turning or stopping is worth reporting before the next one is
             # due. A clock that went back must not hold reports off.
             due = not timedelta(0) <= elapsed < rate or (
                 elapsed >= MIN_TURN_TIME
                 and (
-                    self._stop_unreported or turned(self._reported_course, self._motion)
+                    self._stop_unreported
+                    or turned(self._reported_course, self._motion, profile)
                 )
             )
             if not due:
@@ -297,7 +372,9 @@ class AprsPublisher:
         if not self._suppressed:
             # Report now rather than at the next interval.
             self.hass.async_create_task(
-                self._async_evaluate() if self._moving else self.async_send_report()
+                self._async_evaluate()
+                if self._smart_beaconing
+                else self.async_send_report()
             )
 
     def _read_weather(self, key: str) -> float | None:
@@ -338,20 +415,26 @@ class AprsPublisher:
             if self.sends_weather
             else None
         )
+        # Only what the device reported is sent, never what was worked out.
+        reported = self._reported_motion()
         course_speed = (
-            ""
-            if self._motion.course is None
-            else format_course_speed(
-                self._motion.course,
+            format_course_speed(
+                reported.course,
                 SpeedConverter.convert(
-                    self._motion.speed,
-                    UnitOfSpeed.MILES_PER_HOUR,
-                    UnitOfSpeed.KNOTS,
+                    reported.speed, UnitOfSpeed.MILES_PER_HOUR, UnitOfSpeed.KNOTS
                 ),
             )
+            if reported.course is not None and reported.speed
+            else ""
         )
         return build_report(
-            self.client.callsign, now, position, weather, self._comment, course_speed
+            self.client.callsign,
+            now,
+            position,
+            weather,
+            self._comment,
+            course_speed,
+            reported.altitude,
         )
 
     async def async_send_report(self) -> None:
@@ -359,7 +442,7 @@ class AprsPublisher:
         if self._suppressed_now():
             return
         now = dt_util.utcnow()
-        if self._fix == self._reported_fix:
+        if self._fix == self._reported_fix and self._reported_motion().speed is None:
             # Not having moved since the last report means stopped, whatever
             # speed was last worked out.
             self._motion = STOPPED

@@ -1,6 +1,7 @@
 """Config flow for APRS-IS stations and receivers."""
 
 from collections.abc import Mapping
+from datetime import timedelta
 import logging
 import re
 from typing import Any, override
@@ -15,10 +16,11 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithReload,
 )
-from homeassistant.const import CONF_HOST, CONF_PASSWORD
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, UnitOfTime
 from homeassistant.core import HomeAssistant, callback, split_entity_id
 from homeassistant.data_entry_flow import AbortFlow, section
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -40,11 +42,14 @@ from .const import (
     CONF_HUMIDITY,
     CONF_LOCATION_ENTITY,
     CONF_LUMINOSITY,
+    CONF_MOTION_ENTITY,
     CONF_POSITION_AMBIGUITY,
     CONF_PRESSURE,
     CONF_RAIN_1H,
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
+    CONF_REPORT_INTERVAL,
+    CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_TEMPERATURE,
@@ -58,6 +63,7 @@ from .const import (
     DOMAIN,
     ENTRY_TYPE_RECEIVER,
     ENTRY_TYPE_STATION,
+    MIN_WEATHER_INTERVAL,
     RECEIVE_ONLY_PASSCODE,
     WEATHER_SYMBOL_CODE,
     ZONE_DOMAIN,
@@ -148,6 +154,19 @@ STATION_SCHEMA = probatio.Schema(
             NumberSelectorConfig(min=0, max=4, step=1, mode=NumberSelectorMode.BOX)
         ),
         probatio.Optional(CONF_SUPPRESS_TEMPLATE): TemplateSelector(),
+        probatio.Optional(CONF_MOTION_ENTITY): EntitySelector(
+            EntitySelectorConfig(domain="device_tracker")
+        ),
+        probatio.Required(CONF_SMART_BEACONING, default=True): BooleanSelector(),
+        probatio.Optional(CONF_REPORT_INTERVAL): NumberSelector(
+            NumberSelectorConfig(
+                min=1,
+                max=120,
+                step=1,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement=UnitOfTime.MINUTES,
+            )
+        ),
         probatio.Required(CONF_WEATHER): section(
             probatio.Schema(
                 {
@@ -218,6 +237,10 @@ def validate_station(user_input: dict[str, Any]) -> dict[str, str]:
         COMMENT_MAX_LENGTH_AFTER_EXTENSION if has_extension else COMMENT_MAX_LENGTH
     ):
         return {CONF_COMMENT: "comment_too_long"}
+    if (interval := user_input.get(CONF_REPORT_INTERVAL)) is not None:
+        if sends_weather and timedelta(minutes=interval) < MIN_WEATHER_INTERVAL:
+            return {CONF_REPORT_INTERVAL: "weather_interval_too_short"}
+        user_input[CONF_REPORT_INTERVAL] = int(interval)
     user_input[CONF_POSITION_AMBIGUITY] = int(user_input[CONF_POSITION_AMBIGUITY])
     return {}
 

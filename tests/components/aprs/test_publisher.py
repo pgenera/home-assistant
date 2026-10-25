@@ -13,7 +13,10 @@ from syrupy.assertion import SnapshotAssertion
 from homeassistant.components.aprs.const import (
     CONF_COMMENT,
     CONF_LOCATION_ENTITY,
+    CONF_MOTION_ENTITY,
     CONF_POSITION_AMBIGUITY,
+    CONF_REPORT_INTERVAL,
+    CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
     CONF_WEATHER,
@@ -34,6 +37,7 @@ from .conftest import WEATHER_OPTIONS
 START = "2026-10-21T09:05:00+00:00"
 HOME = {ATTR_LATITUDE: 42.562956, ATTR_LONGITUDE: -70.86915}
 CAR = "device_tracker.car"
+PHONE = "device_tracker.phone"
 LAST_REPORT = "sensor.n0call_13_last_report"
 
 POSITION_OPTIONS = {
@@ -167,6 +171,11 @@ async def test_report_interval(
 MILE_NORTH = 1609.344 / 111_050
 MILE_EAST = 1609.344 / 81_890
 
+# What a phone reports, in m/s and degrees, at 60 and 20 mph.
+NORTH_60 = {"speed": 26.8224, "course": 0}
+EAST_20 = {"speed": 8.9408, "course": 90}
+SOUTH_60 = {"speed": 26.8224, "course": 180}
+
 
 def _move(hass: HomeAssistant, latitude: float, longitude: float, **extra: Any) -> None:
     hass.states.async_set(
@@ -189,7 +198,7 @@ async def test_smart_beaconing(
 
     # 60 mph north: due 3 minutes after the last report, so this waits.
     freezer.tick(timedelta(seconds=60))
-    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    _move(hass, 42.5 + MILE_NORTH, -71.0, **NORTH_60)
     await hass.async_block_till_done()
     assert len(_sent(mock_client_is)) == 1
 
@@ -198,14 +207,14 @@ async def test_smart_beaconing(
 
     # Turning east is reported straight away; that mile took 3 minutes.
     freezer.tick(timedelta(seconds=60))
-    _move(hass, 42.5 + MILE_NORTH, -71.0 + MILE_EAST)
+    _move(hass, 42.5 + MILE_NORTH, -71.0 + MILE_EAST, **EAST_20)
     await hass.async_block_till_done()
     assert len(_sent(mock_client_is)) == 3
 
     # Another turn within 30 seconds waits for the minimum turn time, and
     # goes out at the next check after it.
     freezer.tick(timedelta(seconds=10))
-    _move(hass, 42.5 + MILE_NORTH - MILE_NORTH / 6, -71.0 + MILE_EAST)
+    _move(hass, 42.5 + MILE_NORTH - MILE_NORTH / 6, -71.0 + MILE_EAST, **SOUTH_60)
     await hass.async_block_till_done()
     assert len(_sent(mock_client_is)) == 3
 
@@ -275,7 +284,7 @@ async def test_failed_report_not_counted(
     mock_client_is.sendall.side_effect = AprsConnectionError("not connected")
 
     freezer.tick(timedelta(seconds=60))
-    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    _move(hass, 42.5 + MILE_NORTH, -71.0, **NORTH_60)
     await _async_tick(hass, freezer, timedelta(seconds=121))
     assert len(_sent(mock_client_is)) == 2
 
@@ -442,12 +451,12 @@ async def test_stop_after_report(
     _move(hass, 42.5, -71.0)
     await _async_setup(hass, mock_station_entry)
     freezer.tick(timedelta(seconds=60))
-    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    _move(hass, 42.5 + MILE_NORTH, -71.0, **NORTH_60)
     await _async_tick(hass, freezer, timedelta(seconds=121))
     assert _sent(mock_client_is)[-1].endswith(">360/052")
 
     freezer.tick(timedelta(seconds=30))
-    _move(hass, 42.5 + MILE_NORTH, -71.0, gps_accuracy=5)
+    _move(hass, 42.5 + MILE_NORTH, -71.0, speed=0, course=0)
     await hass.async_block_till_done()
     await _async_tick(hass, freezer, timedelta(seconds=30))
 
@@ -474,8 +483,9 @@ async def test_small_steps_add_up(
         await hass.async_block_till_done()
     await _async_tick(hass, freezer, timedelta(seconds=1))
 
+    # Paced by the speed worked out from positions, which is never sent.
     assert len(_sent(mock_client_is)) == 2
-    assert _sent(mock_client_is)[1].endswith(">360/026")
+    assert _sent(mock_client_is)[1].endswith("W>")
 
 
 @pytest.mark.parametrize("options", [MOVING_OPTIONS])
@@ -506,7 +516,7 @@ async def test_slow_walk(
     mock_station_entry: MockConfigEntry,
     mock_client_is: MagicMock,
 ) -> None:
-    """Test walking pace within a large accuracy reports at the stopped rate."""
+    """Test walking within a large accuracy is paced as walking, without stops."""
     _move(hass, 42.5, -71.0, gps_accuracy=50)
     await _async_setup(hass, mock_station_entry)
 
@@ -517,7 +527,8 @@ async def test_slow_walk(
         await hass.async_block_till_done()
     await _async_tick(hass, freezer, timedelta(seconds=1))
 
-    assert len(_sent(mock_client_is)) == 1
+    # At 1.1 mph walking reports every 23 minutes.
+    assert len(_sent(mock_client_is)) == 2
 
 
 @pytest.mark.parametrize("options", [MOVING_OPTIONS])
@@ -598,3 +609,71 @@ async def test_suppress_template_recovers(
 
     assert "The suppress template for N0CALL-13 renders again" in caplog.text
     assert len(_sent(mock_client_is)) == 1
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{**MOVING_OPTIONS, CONF_MOTION_ENTITY: PHONE, CONF_COMMENT: "x" * 36}],
+)
+async def test_motion_entity(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test course, speed and altitude come from the motion entity only."""
+    _move(hass, 42.5, -71.0)
+    hass.states.async_set(PHONE, "not_home", {**NORTH_60, "altitude": 100.4})
+    await _async_setup(hass, mock_station_entry)
+
+    # Altitude goes first, and the comment is shortened to make room.
+    assert _sent(mock_client_is) == [
+        "N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>360/052/A=000329" + "x" * 27
+    ]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {
+            **MOVING_OPTIONS,
+            CONF_SMART_BEACONING: False,
+            CONF_REPORT_INTERVAL: 5,
+        }
+    ],
+)
+async def test_smart_beaconing_off(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test a moving station reports at the report interval without it."""
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_station_entry)
+
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0, **NORTH_60)
+    await hass.async_block_till_done()
+    assert len(_sent(mock_client_is)) == 1
+
+    await _async_tick(hass, freezer, timedelta(minutes=4))
+    assert _sent(mock_client_is)[1:] == [
+        "N0CALL-13>APZHAS,TCPIP*:/210910z4230.87N/07100.00W>360/052"
+    ]
+
+
+@pytest.mark.parametrize("options", [{**WEATHER_OPTIONS, CONF_REPORT_INTERVAL: 5}])
+async def test_weather_report_interval(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test the report interval option replaces the default."""
+    hass.states.async_set("zone.home", "0", HOME)
+    await _async_setup(hass, mock_station_entry)
+
+    await _async_tick(hass, freezer, timedelta(minutes=5, seconds=1))
+
+    assert len(_sent(mock_client_is)) == 2
