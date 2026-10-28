@@ -16,6 +16,7 @@ from homeassistant.components.aprs.const import (
     CONF_MOTION_ENTITY,
     CONF_POSITION_AMBIGUITY,
     CONF_REPORT_INTERVAL,
+    CONF_SEND_ALTITUDE,
     CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
@@ -629,6 +630,26 @@ async def test_motion_entity(
     # Altitude goes first, and the comment is shortened to make room.
     assert _sent(mock_client_is) == [
         "N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>360/052/A=000329" + "x" * 27
+    ]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{**MOVING_OPTIONS, CONF_MOTION_ENTITY: PHONE, CONF_SEND_ALTITUDE: False}],
+)
+async def test_send_altitude_off(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test a reported altitude is left out when turned off."""
+    _move(hass, 42.5, -71.0)
+    hass.states.async_set(PHONE, "not_home", {**NORTH_60, "altitude": 100.4})
+    await _async_setup(hass, mock_station_entry)
+
+    assert _sent(mock_client_is) == [
+        "N0CALL-13>APZHAS,TCPIP*:/210905z4230.00N/07100.00W>360/052"
     ]
 
 

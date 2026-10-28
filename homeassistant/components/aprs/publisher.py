@@ -61,6 +61,7 @@ from .const import (
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
     CONF_REPORT_INTERVAL,
+    CONF_SEND_ALTITUDE,
     CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
@@ -141,6 +142,7 @@ class AprsPublisher:
         self._motion_entity: str = (
             options.get(CONF_MOTION_ENTITY) or self._location_entity
         )
+        self._send_altitude: bool = options.get(CONF_SEND_ALTITUDE, True)
         self._symbol: str = options[CONF_SYMBOL]
         self._comment: str = options.get(CONF_COMMENT, "")
         self._ambiguity = int(options[CONF_POSITION_AMBIGUITY])
@@ -248,6 +250,8 @@ class AprsPublisher:
             if isinstance(value := state.attributes.get(attr), int | float)
             and math.isfinite(value)
         }
+        if not self._send_altitude:
+            values.pop(ATTR_ALTITUDE, None)
         # Some apps report a speed and course of 0 whenever they have none, even
         # while moving, so those are left to be worked out from positions.
         if (speed := values.get(ATTR_SPEED)) is None or speed <= 0:

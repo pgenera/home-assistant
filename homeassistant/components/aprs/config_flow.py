@@ -49,6 +49,7 @@ from .const import (
     CONF_RAIN_24H,
     CONF_RAIN_SINCE_MIDNIGHT,
     CONF_REPORT_INTERVAL,
+    CONF_SEND_ALTITUDE,
     CONF_SMART_BEACONING,
     CONF_SUPPRESS_TEMPLATE,
     CONF_SYMBOL,
@@ -157,6 +158,7 @@ STATION_SCHEMA = probatio.Schema(
         probatio.Optional(CONF_MOTION_ENTITY): EntitySelector(
             EntitySelectorConfig(domain="device_tracker")
         ),
+        probatio.Required(CONF_SEND_ALTITUDE, default=True): BooleanSelector(),
         probatio.Required(CONF_SMART_BEACONING, default=True): BooleanSelector(),
         probatio.Optional(CONF_REPORT_INTERVAL): NumberSelector(
             NumberSelectorConfig(

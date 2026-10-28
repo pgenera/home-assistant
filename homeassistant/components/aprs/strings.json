@@ -66,6 +66,7 @@
           "motion_entity": "Motion source",
           "position_ambiguity": "Position ambiguity",
           "report_interval": "Report interval",
+          "send_altitude": "Send altitude",
           "smart_beaconing": "SmartBeaconing",
           "suppress_template": "Suppress reports when",
           "symbol": "Symbol"
@@ -76,6 +77,7 @@
           "motion_entity": "Optional device tracker whose reported speed, course and altitude are sent, such as a phone's when the location is a person. Defaults to the location. Speed, course and altitude are only sent when the device reports them.",
           "position_ambiguity": "Number of trailing position digits to leave out, from 0 (exact) to 4 (nearest degree).",
           "report_interval": "Minutes between reports, or the longest gap with SmartBeaconing. Defaults to 10 with weather data (at least 5) and 30 without.",
+          "send_altitude": "Send the altitude the motion source reports. Turn this off if it isn't height above sea level: many phones report height above the GPS ellipsoid, which can be off by tens of meters.",
           "smart_beaconing": "For a person or device tracker, report more often the faster it moves (every 3 to 5 minutes at speed, walking or driving), soon after turning or stopping, and at the report interval when stopped. Turned off, it reports at the report interval.",
           "suppress_template": "Optional template; while it renders true, no reports are sent, for example near home. A report goes out as soon as it renders false again. If it fails to render, reports are held back too.",
           "symbol": "APRS symbol table and code, such as /_ for a weather station or /- for a house."
@@ -198,6 +200,7 @@
           "motion_entity": "[%key:component::aprs::config::step::station::data::motion_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data::position_ambiguity%]",
           "report_interval": "[%key:component::aprs::config::step::station::data::report_interval%]",
+          "send_altitude": "[%key:component::aprs::config::step::station::data::send_altitude%]",
           "smart_beaconing": "[%key:component::aprs::config::step::station::data::smart_beaconing%]",
           "suppress_template": "[%key:component::aprs::config::step::station::data::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data::symbol%]"
@@ -208,6 +211,7 @@
           "motion_entity": "[%key:component::aprs::config::step::station::data_description::motion_entity%]",
           "position_ambiguity": "[%key:component::aprs::config::step::station::data_description::position_ambiguity%]",
           "report_interval": "[%key:component::aprs::config::step::station::data_description::report_interval%]",
+          "send_altitude": "[%key:component::aprs::config::step::station::data_description::send_altitude%]",
           "smart_beaconing": "[%key:component::aprs::config::step::station::data_description::smart_beaconing%]",
           "suppress_template": "[%key:component::aprs::config::step::station::data_description::suppress_template%]",
           "symbol": "[%key:component::aprs::config::step::station::data_description::symbol%]"

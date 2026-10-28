@@ -28,6 +28,7 @@
     'options': dict({
       'location_entity': 'zone.home',
       'position_ambiguity': 0,
+      'send_altitude': True,
       'smart_beaconing': True,
       'symbol': '/_',
       'weather': dict({
