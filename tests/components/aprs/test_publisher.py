@@ -632,6 +632,30 @@ async def test_motion_entity(
     ]
 
 
+@pytest.mark.parametrize("options", [{**MOVING_OPTIONS, CONF_MOTION_ENTITY: PHONE}])
+async def test_reported_zero_speed_ignored(
+    hass: HomeAssistant,
+    freezer: FrozenDateTimeFactory,
+    mock_station_entry: MockConfigEntry,
+    mock_client_is: MagicMock,
+) -> None:
+    """Test a reported speed of 0 does not hide travel between positions."""
+    hass.states.async_set(PHONE, "not_home", {"speed": 0, "course": 0})
+    _move(hass, 42.5, -71.0)
+    await _async_setup(hass, mock_station_entry)
+
+    # A mile a minute is due at the fast rate, 3 minutes after the last report.
+    freezer.tick(timedelta(seconds=60))
+    _move(hass, 42.5 + MILE_NORTH, -71.0)
+    await hass.async_block_till_done()
+    assert len(_sent(mock_client_is)) == 1
+
+    await _async_tick(hass, freezer, timedelta(seconds=121))
+    assert _sent(mock_client_is)[1:] == [
+        "N0CALL-13>APZHAS,TCPIP*:/210908z4230.87N/07100.00W>"
+    ]
+
+
 @pytest.mark.parametrize(
     "options",
     [

@@ -248,9 +248,12 @@ class AprsPublisher:
             if isinstance(value := state.attributes.get(attr), int | float)
             and math.isfinite(value)
         }
-        speed = values.get(ATTR_SPEED)
+        # Some apps report a speed and course of 0 whenever they have none, even
+        # while moving, so those are left to be worked out from positions.
+        if (speed := values.get(ATTR_SPEED)) is None or speed <= 0:
+            return ReportedMotion(altitude=values.get(ATTR_ALTITUDE))
         return ReportedMotion(
-            speed=None if speed is None else max(speed, 0) * METERS_PER_SECOND_TO_MPH,
+            speed=speed * METERS_PER_SECOND_TO_MPH,
             course=values.get(ATTR_COURSE),
             altitude=values.get(ATTR_ALTITUDE),
         )
